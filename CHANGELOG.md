@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-03-09
+
+### Changed
+- 🎨 **界面优化**
+  - 将检查更新按钮移至左侧边栏底部（收起按钮上方）
+  - 边栏收起时仅显示图标，展开时显示"检查更新"文字
+  - 从首页移除浮动的检查更新按钮
+  - 优化按钮样式和交互体验
+
 ## [1.0.2] - 2026-03-09
 
 ### Added
@@ -119,6 +128,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 不会上传任何用户数据到第三方服务器
 - 建议定期备份导出的凭证文件
 
+[1.0.3]: https://github.com/vag-Zhao/WeMediaSpider-Go/compare/v1.0.2...v1.0.3
 [1.0.2]: https://github.com/vag-Zhao/WeMediaSpider-Go/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/vag-Zhao/WeMediaSpider-Go/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/vag-Zhao/WeMediaSpider-Go/releases/tag/v1.0.0

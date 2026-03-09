@@ -130,7 +130,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </Button>
           </div>
         </Sider>
-        </Sider>
         <AntLayout style={{ overflow: 'hidden' }}>
           <Content
             style={{

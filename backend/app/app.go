@@ -354,7 +354,7 @@ func (a *App) GetCacheStats() (map[string]int, error) {
 
 // GetAppVersion 获取应用版本
 func (a *App) GetAppVersion() string {
-	return "1.0.2"
+	return "1.0.3"
 }
 
 // VersionInfo 版本信息
