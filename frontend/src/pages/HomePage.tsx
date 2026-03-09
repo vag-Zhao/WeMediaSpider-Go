@@ -19,12 +19,14 @@ import {
   TrophyOutlined,
   TeamOutlined,
   GiftOutlined,
+  SyncOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useScrapeStore } from '../stores/scrapeStore'
 import { useLoginStore } from '../stores/loginStore'
 import { api } from '../services/api'
 import dayjs from 'dayjs'
+import ReactMarkdown from 'react-markdown'
 import '../components/WaveAnimation.css'
 
 const HomePage: React.FC = () => {
@@ -37,18 +39,52 @@ const HomePage: React.FC = () => {
   const [appData, setAppData] = useState<any>({})
   const [updateInfo, setUpdateInfo] = useState<any>(null)
   const [showUpdateModal, setShowUpdateModal] = useState(false)
+  const [checkingUpdate, setCheckingUpdate] = useState(false)
+
+  // 检查是否应该显示更新提示（当天未忽略）
+  const shouldShowUpdatePrompt = () => {
+    const today = dayjs().format('YYYY-MM-DD')
+    const ignoredDate = localStorage.getItem('update_ignored_date')
+    return ignoredDate !== today
+  }
 
   // 检查更新
-  const checkForUpdates = async () => {
+  const checkForUpdates = async (manual = false) => {
     try {
+      setCheckingUpdate(true)
       const versionInfo = await api.checkForUpdates()
       if (versionInfo.hasUpdate) {
-        setUpdateInfo(versionInfo)
-        setShowUpdateModal(true)
+        if (manual || shouldShowUpdatePrompt()) {
+          setUpdateInfo(versionInfo)
+          setShowUpdateModal(true)
+        }
+      } else if (manual) {
+        message.success('当前已是最新版本')
       }
     } catch (error) {
       console.error('检查更新失败:', error)
+      if (manual) {
+        message.error('检查更新失败，请稍后重试')
+      }
+    } finally {
+      setCheckingUpdate(false)
     }
+  }
+
+  // 稍后更新（当天不再提醒）
+  const handleLaterUpdate = () => {
+    const today = dayjs().format('YYYY-MM-DD')
+    localStorage.setItem('update_ignored_date', today)
+    setShowUpdateModal(false)
+    message.info('今日将不再提醒更新')
+  }
+
+  // 立即下载
+  const handleDownloadUpdate = () => {
+    if (updateInfo?.updateUrl) {
+      window.open(updateInfo.updateUrl, '_blank')
+    }
+    setShowUpdateModal(false)
   }
 
   // 检查登录状态和加载应用数据
@@ -177,6 +213,7 @@ const HomePage: React.FC = () => {
       flexDirection: 'column',
       gap: 12,
       overflow: 'hidden',
+      position: 'relative',
     }}>
       {/* 顶部欢迎区 */}
       <Card
@@ -625,21 +662,16 @@ const HomePage: React.FC = () => {
           </Space>
         }
         open={showUpdateModal}
-        onCancel={() => setShowUpdateModal(false)}
+        onCancel={handleLaterUpdate}
         footer={[
-          <Button key="later" onClick={() => setShowUpdateModal(false)}>
+          <Button key="later" onClick={handleLaterUpdate}>
             稍后更新
           </Button>,
           <Button
             key="download"
             type="primary"
             icon={<CloudDownloadOutlined />}
-            onClick={() => {
-              if (updateInfo?.updateUrl) {
-                window.open(updateInfo.updateUrl, '_blank')
-              }
-              setShowUpdateModal(false)
-            }}
+            onClick={handleDownloadUpdate}
           >
             立即下载
           </Button>,
@@ -668,21 +700,37 @@ const HomePage: React.FC = () => {
               <div
                 style={{
                   background: '#1a1a1a',
-                  padding: 12,
+                  padding: 16,
                   borderRadius: 6,
-                  maxHeight: 300,
+                  maxHeight: 400,
                   overflow: 'auto',
-                  whiteSpace: 'pre-wrap',
-                  fontSize: 13,
+                  fontSize: 14,
                   lineHeight: 1.6,
                 }}
+                className="markdown-content"
               >
-                {updateInfo.releaseNotes}
+                <ReactMarkdown>{updateInfo.releaseNotes}</ReactMarkdown>
               </div>
             </div>
           )}
         </div>
       </Modal>
+
+      {/* 检查更新按钮 */}
+      <Button
+        type="text"
+        icon={<SyncOutlined spin={checkingUpdate} />}
+        onClick={() => checkForUpdates(true)}
+        loading={checkingUpdate}
+        style={{
+          position: 'absolute',
+          bottom: 16,
+          right: 16,
+          color: 'rgba(255, 255, 255, 0.45)',
+          zIndex: 10,
+        }}
+        title="检查更新"
+      />
     </div>
   )
 }
