@@ -375,7 +375,21 @@ func (a *App) CheckForUpdates() (VersionInfo, error) {
 		Timeout: 10 * time.Second,
 	}
 
-	resp, err := client.Get("https://api.github.com/repos/vag-Zhao/WeMediaSpider-Go/releases/latest")
+	req, err := http.NewRequest("GET", "https://api.github.com/repos/vag-Zhao/WeMediaSpider-Go/releases/latest", nil)
+	if err != nil {
+		logger.Warnf("创建请求失败: %v", err)
+		return VersionInfo{
+			CurrentVersion: currentVersion,
+			LatestVersion:  currentVersion,
+			HasUpdate:      false,
+		}, nil
+	}
+
+	// 添加 User-Agent 请求头，GitHub API 要求
+	req.Header.Set("User-Agent", "WeMediaSpider-Go/"+currentVersion)
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+
+	resp, err := client.Do(req)
 	if err != nil {
 		logger.Warnf("检查更新失败: %v", err)
 		return VersionInfo{
