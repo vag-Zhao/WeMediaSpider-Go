@@ -375,7 +375,7 @@ func (a *App) CheckForUpdates() (VersionInfo, error) {
 		Timeout: 10 * time.Second,
 	}
 
-	resp, err := client.Get("https://api.github.com/repos/yourusername/WeMediaSpider/releases/latest")
+	resp, err := client.Get("https://api.github.com/repos/vag-Zhao/WeMediaSpider-Go/releases/latest")
 	if err != nil {
 		logger.Warnf("检查更新失败: %v", err)
 		return VersionInfo{
