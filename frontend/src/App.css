@@ -1,0 +1,304 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+#root {
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* 修复所有输入框和选择框的边缘毛刺 */
+.ant-input,
+.ant-input-number,
+.ant-input-number-input,
+.ant-select-selector,
+.ant-picker,
+.ant-picker-input > input,
+.ant-input-affix-wrapper,
+.ant-input-search,
+.ant-input-group-addon,
+.ant-select-selection-search-input {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: transform;
+}
+
+/* 优化边框渲染 */
+.ant-input,
+.ant-input-number,
+.ant-select-selector,
+.ant-picker,
+.ant-input-affix-wrapper {
+  border-width: 1px;
+  border-style: solid;
+  outline: none;
+  transform: translate3d(0, 0, 0);
+}
+
+/* 隐藏所有滚动条 */
+::-webkit-scrollbar {
+  width: 0px;
+  height: 0px;
+  display: none;
+}
+
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+/* Ant Design 暗色主题调整 */
+.ant-layout {
+  background: #1a1a1a;
+}
+
+.ant-card {
+  background: #1f1f1f;
+  border-color: #303030;
+}
+
+.ant-table {
+  background: #1f1f1f;
+}
+
+.ant-table-thead > tr > th {
+  background: #141414;
+  border-color: #303030;
+}
+
+.ant-table-tbody > tr > td {
+  border-color: #303030;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background: #262626;
+}
+
+/* 链接颜色 */
+a {
+  color: #07C160;
+}
+
+a:hover {
+  color: #06a850;
+}
+
+/* 按钮样式 */
+.ant-btn {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-width: 1px;
+  border-style: solid;
+  outline: none;
+}
+
+.ant-btn-primary {
+  background: #07C160;
+  border-color: #07C160;
+}
+
+.ant-btn-primary:hover {
+  background: #06a850;
+  border-color: #06a850;
+}
+
+/* 进度条颜色 */
+.ant-progress-bg {
+  background: #07C160;
+}
+
+/* 标签颜色 */
+.ant-tag {
+  border-radius: 4px;
+}
+
+/* 输入框样式 */
+.ant-input,
+.ant-input-number,
+.ant-select-selector,
+.ant-picker {
+  background: #141414 !important;
+  border-color: #303030 !important;
+  box-sizing: border-box !important;
+}
+
+.ant-input:hover,
+.ant-input-number:hover,
+.ant-select-selector:hover,
+.ant-picker:hover {
+  border-color: #07C160 !important;
+}
+
+.ant-input:focus,
+.ant-input-number:focus,
+.ant-select-focused .ant-select-selector,
+.ant-picker-focused {
+  border-color: #07C160 !important;
+  box-shadow: 0 0 0 2px rgba(7, 193, 96, 0.2) !important;
+}
+
+/* 修复输入框容器 */
+.ant-input-affix-wrapper,
+.ant-input-number-affix-wrapper {
+  box-sizing: border-box !important;
+}
+
+.ant-input-affix-wrapper:hover,
+.ant-input-number-affix-wrapper:hover {
+  border-color: #07C160 !important;
+}
+
+/* 下拉菜单 */
+.ant-select-dropdown {
+  background: #1f1f1f;
+}
+
+.ant-select-item {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.ant-select-item-option-selected {
+  background: #262626;
+}
+
+.ant-select-item-option-active {
+  background: #303030;
+}
+
+/* 日期选择器 */
+.ant-picker-dropdown {
+  background: #1f1f1f;
+}
+
+.ant-picker-panel {
+  background: #1f1f1f;
+  border-color: #303030;
+}
+
+.ant-picker-cell-in-view.ant-picker-cell-selected .ant-picker-cell-inner {
+  background: #07C160;
+}
+
+/* Modal */
+.ant-modal-content {
+  background: #1f1f1f;
+}
+
+.ant-modal-header {
+  background: #1f1f1f;
+  border-color: #303030;
+}
+
+.ant-modal-footer {
+  border-color: #303030;
+}
+
+/* 描述列表 */
+.ant-descriptions-bordered .ant-descriptions-item-label {
+  background: #141414;
+}
+
+.ant-descriptions-bordered .ant-descriptions-item-content {
+  background: #1f1f1f;
+}
+
+/* 统计数字 */
+.ant-statistic {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.ant-statistic-title {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.ant-statistic-content {
+  color: #07C160;
+}
+
+/* InputNumber 居中对齐 */
+.centered-input-number .ant-input-number-input {
+  text-align: center;
+}
+
+/* InputNumber 控制按钮在 hover 时显示 */
+.centered-input-number .ant-input-number-handler-wrap {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.centered-input-number:hover .ant-input-number-handler-wrap {
+  opacity: 1;
+}
+
+/* 修复 InputNumber 右侧空白问题 */
+.ant-input-number {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.ant-input-number-handler-wrap {
+  opacity: 1 !important;
+  background: #1a1a1a !important;
+  border-left: 1px solid #303030 !important;
+}
+
+.ant-input-number:hover .ant-input-number-handler-wrap {
+  background: #1a1a1a !important;
+}
+
+.ant-input-number-handler {
+  border-color: #303030 !important;
+}
+
+.ant-input-number-handler:hover {
+  background: #262626 !important;
+}
+
+.ant-input-number-handler-up-inner,
+.ant-input-number-handler-down-inner {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+/* 确保输入区域不会被挤压 */
+.ant-input-number-input-wrap {
+  flex: 1 !important;
+  min-width: 0 !important;
+}
+
+.ant-input-number-input {
+  width: 100% !important;
+  padding-right: 0 !important;
+}
+
+/* 隐藏网盘选择下拉框的滚动条 */
+.cloud-drive-select-dropdown .rc-virtual-list-scrollbar {
+  display: none !important;
+}
+
+.cloud-drive-select-dropdown .rc-virtual-list-holder {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.cloud-drive-select-dropdown .rc-virtual-list-holder::-webkit-scrollbar {
+  display: none;
+}

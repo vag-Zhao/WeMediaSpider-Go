@@ -1,0 +1,89 @@
+.wave-container {
+  position: absolute;
+  right: 20px;
+  top: 31%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 70px;
+  pointer-events: none;
+}
+
+.wave {
+  width: 5px;
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 6px;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+  animation-direction: alternate;
+}
+
+.wave-1 {
+  height: 30%;
+  animation: bar-bounce 0.8s infinite;
+  animation-delay: 0s;
+}
+
+.wave-2 {
+  height: 40%;
+  animation: bar-bounce 0.7s infinite;
+  animation-delay: 0.1s;
+}
+
+.wave-3 {
+  height: 60%;
+  animation: bar-bounce 0.9s infinite;
+  animation-delay: 0.2s;
+}
+
+.wave-4 {
+  height: 35%;
+  animation: bar-bounce 0.75s infinite;
+  animation-delay: 0.3s;
+}
+
+.wave-5 {
+  height: 55%;
+  animation: bar-bounce 0.85s infinite;
+  animation-delay: 0.4s;
+}
+
+.wave-6 {
+  height: 45%;
+  animation: bar-bounce 0.8s infinite;
+  animation-delay: 0.15s;
+}
+
+.wave-7 {
+  height: 30%;
+  animation: bar-bounce 0.95s infinite;
+  animation-delay: 0.25s;
+}
+
+.wave-8 {
+  height: 50%;
+  animation: bar-bounce 0.7s infinite;
+  animation-delay: 0.35s;
+}
+
+.wave-9 {
+  height: 60%;
+  animation: bar-bounce 1s infinite;
+  animation-delay: 0.35s;
+}
+
+@keyframes bar-bounce {
+  0% {
+    transform: scaleY(0.3);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleY(0.3);
+    opacity: 0.5;
+  }
+}

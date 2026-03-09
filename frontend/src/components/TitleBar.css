@@ -1,0 +1,147 @@
+.title-bar {
+  height: 40px;
+  background: #0d0d0d;
+  border-bottom: 1px solid #1f1f1f;
+  display: flex;
+  align-items: center;
+  position: relative;
+  padding: 0 12px;
+  user-select: none;
+  --wails-draggable: drag;
+}
+
+.title-bar-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 1;
+}
+
+.title-bar-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+}
+
+.title-bar-controls {
+  margin-left: auto;
+  display: flex;
+  gap: 0;
+  --wails-draggable: no-drag;
+  z-index: 1;
+}
+
+.title-bar-button {
+  width: 46px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 背景光晕效果 */
+.title-bar-button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.2), transparent 70%);
+  opacity: 0;
+  transform: scale(0);
+  transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.title-bar-button:hover::before {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* 底部边框动画 */
+.title-bar-button::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  background: #fff;
+  transform: translateX(-50%);
+  transition: width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.title-bar-button:hover::after {
+  width: 70%;
+}
+
+.title-bar-button:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.title-bar-button:active {
+  transform: scale(0.9);
+  transition: transform 0.1s ease;
+}
+
+/* 最小化按钮 */
+.title-bar-button.minimize::after {
+  background: linear-gradient(90deg, transparent, #ffd93d, transparent);
+}
+
+.title-bar-button.minimize:hover {
+  background: rgba(255, 217, 61, 0.1);
+}
+
+.title-bar-button.minimize:hover .anticon {
+  color: #ffd93d !important;
+  filter: drop-shadow(0 0 8px rgba(255, 217, 61, 0.6));
+}
+
+/* 最大化按钮 */
+.title-bar-button.maximize::after {
+  background: linear-gradient(90deg, transparent, #6bcf7f, transparent);
+}
+
+.title-bar-button.maximize:hover {
+  background: rgba(107, 207, 127, 0.1);
+}
+
+.title-bar-button.maximize:hover .anticon {
+  color: #6bcf7f !important;
+  filter: drop-shadow(0 0 8px rgba(107, 207, 127, 0.6));
+}
+
+/* 关闭按钮 */
+.title-bar-button.close::after {
+  background: linear-gradient(90deg, transparent, #ff4757, transparent);
+}
+
+.title-bar-button.close:hover {
+  background: rgba(255, 71, 87, 0.15);
+}
+
+.title-bar-button.close:hover .anticon {
+  color: #ff4757 !important;
+  filter: drop-shadow(0 0 8px rgba(255, 71, 87, 0.6));
+}
+
+/* 图标动画 */
+.title-bar-button .anticon {
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 1;
+}
+
+.title-bar-button:hover .anticon {
+  transform: scale(1.15) translateY(-1px);
+}
+
+.title-bar-button:active .anticon {
+  transform: scale(0.95);
+}

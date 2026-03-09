@@ -1,0 +1,22 @@
+/* InputNumber 数值居中 */
+.centered-input-number .ant-input-number-input {
+  text-align: center !important;
+  font-size: 16px;
+  font-weight: 600;
+  color: #07C160;
+}
+
+/* 减小输入框高度 */
+.centered-input-number {
+  height: 36px;
+}
+
+.centered-input-number .ant-input-number-input {
+  height: 34px;
+  line-height: 34px;
+}
+
+/* hover 时显示控制按钮 */
+.centered-input-number .ant-input-number-handler-wrap {
+  opacity: 1;
+}
