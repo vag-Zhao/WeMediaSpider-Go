@@ -5,6 +5,7 @@ import {app} from '../models';
 import {models} from '../models';
 import {storage} from '../models';
 import {frontend} from '../models';
+import {context} from '../models';
 
 export function BatchDownloadImages(arg1:Array<spider.ImageInfo>,arg2:string,arg3:number):Promise<void>;
 
@@ -34,13 +35,21 @@ export function GetAppVersion():Promise<string>;
 
 export function GetCacheStats():Promise<Record<string, number>>;
 
+export function GetCloseToTray():Promise<boolean>;
+
 export function GetDataDirectory():Promise<string>;
 
 export function GetDefaultConfig():Promise<models.Config>;
 
 export function GetLoginStatus():Promise<models.LoginStatus>;
 
+export function HideToTray():Promise<void>;
+
 export function ImportCredentials():Promise<void>;
+
+export function IsAutostartEnabled():Promise<boolean>;
+
+export function IsAutostartSilent():Promise<boolean>;
 
 export function ListDataFiles():Promise<Array<storage.DataFileInfo>>;
 
@@ -62,6 +71,14 @@ export function SelectDirectory():Promise<string>;
 
 export function SelectSaveFile(arg1:string,arg2:Array<frontend.FileFilter>):Promise<string>;
 
+export function SetAutostart(arg1:boolean,arg2:boolean):Promise<void>;
+
+export function SetCloseToTray(arg1:boolean):Promise<void>;
+
+export function ShowWindow():Promise<void>;
+
 export function StartScrape(arg1:models.ScrapeConfig):Promise<Array<models.Article>>;
+
+export function Startup(arg1:context.Context):Promise<void>;
 
 export function UpdateAppData(arg1:Array<models.Article>):Promise<void>;

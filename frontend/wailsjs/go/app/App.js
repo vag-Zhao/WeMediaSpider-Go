@@ -58,6 +58,10 @@ export function GetCacheStats() {
   return window['go']['app']['App']['GetCacheStats']();
 }
 
+export function GetCloseToTray() {
+  return window['go']['app']['App']['GetCloseToTray']();
+}
+
 export function GetDataDirectory() {
   return window['go']['app']['App']['GetDataDirectory']();
 }
@@ -70,8 +74,20 @@ export function GetLoginStatus() {
   return window['go']['app']['App']['GetLoginStatus']();
 }
 
+export function HideToTray() {
+  return window['go']['app']['App']['HideToTray']();
+}
+
 export function ImportCredentials() {
   return window['go']['app']['App']['ImportCredentials']();
+}
+
+export function IsAutostartEnabled() {
+  return window['go']['app']['App']['IsAutostartEnabled']();
+}
+
+export function IsAutostartSilent() {
+  return window['go']['app']['App']['IsAutostartSilent']();
 }
 
 export function ListDataFiles() {
@@ -114,8 +130,24 @@ export function SelectSaveFile(arg1, arg2) {
   return window['go']['app']['App']['SelectSaveFile'](arg1, arg2);
 }
 
+export function SetAutostart(arg1, arg2) {
+  return window['go']['app']['App']['SetAutostart'](arg1, arg2);
+}
+
+export function SetCloseToTray(arg1) {
+  return window['go']['app']['App']['SetCloseToTray'](arg1);
+}
+
+export function ShowWindow() {
+  return window['go']['app']['App']['ShowWindow']();
+}
+
 export function StartScrape(arg1) {
   return window['go']['app']['App']['StartScrape'](arg1);
+}
+
+export function Startup(arg1) {
+  return window['go']['app']['App']['Startup'](arg1);
 }
 
 export function UpdateAppData(arg1) {

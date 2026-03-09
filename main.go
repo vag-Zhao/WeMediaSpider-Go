@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"embed"
+	"flag"
+	"os"
 
 	"WeMediaSpider/backend/app"
 
@@ -9,12 +12,17 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
 func main() {
+	// 解析命令行参数
+	silent := flag.Bool("silent", false, "Start in silent mode (hidden to tray)")
+	flag.Parse()
+
 	// Create an instance of the app structure
 	application := app.NewApp()
 
@@ -29,8 +37,23 @@ func main() {
 			Assets: assets,
 		},
 		BackgroundColour: &options.RGBA{R: 26, G: 26, B: 26, A: 1},
-		OnStartup:        application.Startup,
-		OnShutdown:       application.Shutdown,
+		OnStartup: func(ctx context.Context) {
+			application.Startup(ctx)
+
+			// 如果是静默启动，隐藏窗口
+			if *silent {
+				runtime.WindowHide(ctx)
+			}
+		},
+		OnShutdown: application.Shutdown,
+		OnBeforeClose: func(ctx context.Context) bool {
+			// 如果启用了关闭到托盘，则隐藏窗口而不是退出
+			if application.GetCloseToTray() {
+				application.HideToTray()
+				return true // 阻止关闭
+			}
+			return false // 允许关闭
+		},
 		Bind: []interface{}{
 			application,
 		},
@@ -44,5 +67,6 @@ func main() {
 
 	if err != nil {
 		println("Error:", err.Error())
+		os.Exit(1)
 	}
 }

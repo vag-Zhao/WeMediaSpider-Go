@@ -7,6 +7,8 @@ import {
   App,
   Row,
   Col,
+  Switch,
+  Divider,
 } from 'antd'
 import {
   ReloadOutlined,
@@ -15,6 +17,9 @@ import {
   TeamOutlined,
   FileTextOutlined,
   DatabaseOutlined,
+  AppstoreOutlined,
+  RocketOutlined,
+  EyeInvisibleOutlined,
 } from '@ant-design/icons'
 import { useConfigStore } from '../stores/configStore'
 import { useFormStore } from '../stores/formStore'
@@ -29,6 +34,11 @@ const SettingsPage: React.FC = () => {
   const formStore = useFormStore()
   const [loading, setLoading] = useState(false)
   const saveTimerRef = useRef<number | null>(null)
+
+  // 托盘和自启动设置
+  const [closeToTray, setCloseToTray] = useState(true)
+  const [autostartEnabled, setAutostartEnabled] = useState(false)
+  const [autostartSilent, setAutostartSilent] = useState(false)
 
   // 加载配置
   const loadConfig = async () => {
@@ -51,10 +61,69 @@ const SettingsPage: React.FC = () => {
       formStore.setMaxPages(cfg.maxPages)
       formStore.setRequestInterval(cfg.requestInterval)
       formStore.setMaxWorkers(cfg.maxWorkers)
+
+      // 加载托盘和自启动设置
+      await loadSystemSettings()
     } catch (error: any) {
       message.error('加载配置失败: ' + (error.message || '未知错误'))
     } finally {
       setLoading(false)
+    }
+  }
+
+  // 加载系统设置
+  const loadSystemSettings = async () => {
+    try {
+      const { GetCloseToTray, IsAutostartEnabled, IsAutostartSilent } = await import('../../wailsjs/go/app/App')
+
+      const closeToTrayValue = await GetCloseToTray()
+      const autostartValue = await IsAutostartEnabled()
+      const silentValue = await IsAutostartSilent()
+
+      setCloseToTray(closeToTrayValue)
+      setAutostartEnabled(autostartValue)
+      setAutostartSilent(silentValue)
+    } catch (error) {
+      console.error('加载系统设置失败:', error)
+    }
+  }
+
+  // 处理关闭到托盘切换
+  const handleCloseToTrayChange = async (checked: boolean) => {
+    try {
+      const { SetCloseToTray } = await import('../../wailsjs/go/app/App')
+      await SetCloseToTray(checked)
+      setCloseToTray(checked)
+      message.success(checked ? '已启用关闭到托盘' : '已禁用关闭到托盘')
+    } catch (error: any) {
+      message.error('设置失败: ' + (error.message || '未知错误'))
+    }
+  }
+
+  // 处理自启动切换
+  const handleAutostartChange = async (checked: boolean) => {
+    try {
+      const { SetAutostart } = await import('../../wailsjs/go/app/App')
+      await SetAutostart(checked, autostartSilent)
+      setAutostartEnabled(checked)
+      message.success(checked ? '已启用开机自启动' : '已禁用开机自启动')
+    } catch (error: any) {
+      message.error('设置失败: ' + (error.message || '未知错误'))
+    }
+  }
+
+  // 处理静默启动切换
+  const handleSilentChange = async (checked: boolean) => {
+    try {
+      const { SetAutostart } = await import('../../wailsjs/go/app/App')
+      // 如果自启动已启用，需要重新设置
+      if (autostartEnabled) {
+        await SetAutostart(true, checked)
+      }
+      setAutostartSilent(checked)
+      message.success(checked ? '已启用静默启动' : '已禁用静默启动')
+    } catch (error: any) {
+      message.error('设置失败: ' + (error.message || '未知错误'))
     }
   }
 
@@ -254,6 +323,97 @@ const SettingsPage: React.FC = () => {
             </Col>
           </Row>
         </Form>
+      </Card>
+
+      {/* 系统设置 */}
+      <Card
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AppstoreOutlined style={{ color: '#07C160', fontSize: 18 }} />
+            <span style={{ fontSize: 16, fontWeight: 600 }}>系统设置</span>
+          </div>
+        }
+        style={{
+          background: 'rgba(255, 255, 255, 0.02)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          marginTop: 16,
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* 关闭到托盘 */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '12px 16px',
+            background: 'rgba(255, 255, 255, 0.02)',
+            borderRadius: 6,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <EyeInvisibleOutlined style={{ color: '#07C160', fontSize: 18 }} />
+              <div>
+                <div style={{ color: '#fff', fontSize: 14, fontWeight: 500 }}>关闭到托盘</div>
+                <div style={{ color: 'rgba(255, 255, 255, 0.45)', fontSize: 12, marginTop: 4 }}>
+                  点击关闭按钮时最小化到系统托盘，而不是退出程序
+                </div>
+              </div>
+            </div>
+            <Switch
+              checked={closeToTray}
+              onChange={handleCloseToTrayChange}
+            />
+          </div>
+
+          <Divider style={{ margin: 0, borderColor: 'rgba(255, 255, 255, 0.08)' }} />
+
+          {/* 开机自启动 */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '12px 16px',
+            background: 'rgba(255, 255, 255, 0.02)',
+            borderRadius: 6,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <RocketOutlined style={{ color: '#07C160', fontSize: 18 }} />
+              <div>
+                <div style={{ color: '#fff', fontSize: 14, fontWeight: 500 }}>开机自启动</div>
+                <div style={{ color: 'rgba(255, 255, 255, 0.45)', fontSize: 12, marginTop: 4 }}>
+                  Windows 启动时自动运行本程序
+                </div>
+              </div>
+            </div>
+            <Switch
+              checked={autostartEnabled}
+              onChange={handleAutostartChange}
+            />
+          </div>
+
+          {/* 静默启动 */}
+          {autostartEnabled && (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '12px 16px 12px 46px',
+              background: 'rgba(255, 255, 255, 0.02)',
+              borderRadius: 6,
+              marginLeft: 20,
+            }}>
+              <div>
+                <div style={{ color: '#fff', fontSize: 14, fontWeight: 500 }}>静默启动</div>
+                <div style={{ color: 'rgba(255, 255, 255, 0.45)', fontSize: 12, marginTop: 4 }}>
+                  启动时直接最小化到托盘，不显示主窗口
+                </div>
+              </div>
+              <Switch
+                checked={autostartSilent}
+                onChange={handleSilentChange}
+              />
+            </div>
+          )}
+        </div>
       </Card>
     </div>
   )

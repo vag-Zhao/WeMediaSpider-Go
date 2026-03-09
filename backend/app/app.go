@@ -10,12 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"WeMediaSpider/backend/internal/autostart"
 	"WeMediaSpider/backend/internal/cache"
 	"WeMediaSpider/backend/internal/config"
 	"WeMediaSpider/backend/internal/export"
 	"WeMediaSpider/backend/internal/models"
 	"WeMediaSpider/backend/internal/spider"
 	"WeMediaSpider/backend/internal/storage"
+	"WeMediaSpider/backend/internal/tray"
 	"WeMediaSpider/backend/pkg/logger"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -31,6 +33,9 @@ type App struct {
 	imageDownloader  *spider.ImageDownloader
 	dataManager      *config.DataManager
 	storageManager   *storage.Manager
+	trayManager      *tray.Manager
+	autostartManager *autostart.Manager
+	closeToTray      bool // 关闭到托盘
 }
 
 // NewApp 创建应用实例
@@ -44,18 +49,36 @@ func NewApp() *App {
 		logger.Errorf("Failed to create cache manager: %v", err)
 	}
 
+	// 创建自启动管理器
+	autostartManager, err := autostart.NewManager()
+	if err != nil {
+		logger.Errorf("Failed to create autostart manager: %v", err)
+	}
+
 	return &App{
-		loginManager:   spider.NewLoginManager(),
-		configManager:  config.NewManager(),
-		cacheManager:   cacheManager,
-		dataManager:    config.NewDataManager(),
-		storageManager: storage.NewManager(),
+		loginManager:     spider.NewLoginManager(),
+		configManager:    config.NewManager(),
+		cacheManager:     cacheManager,
+		dataManager:      config.NewDataManager(),
+		storageManager:   storage.NewManager(),
+		trayManager:      tray.NewManager(),
+		autostartManager: autostartManager,
+		closeToTray:      true, // 默认关闭到托盘
 	}
 }
 
 // Startup 应用启动时调用
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
+
+	// 初始化系统托盘
+	iconData, err := os.ReadFile("build/appicon.png")
+	if err != nil {
+		logger.Warnf("Failed to load tray icon: %v", err)
+		iconData = nil
+	}
+	a.trayManager.Setup(ctx, iconData)
+
 	logger.Info("Application started")
 }
 
@@ -65,6 +88,63 @@ func (a *App) Shutdown(ctx context.Context) {
 		a.cacheManager.Close()
 	}
 	logger.Info("Application shutdown")
+}
+
+// ============================================================
+// 托盘和窗口管理
+// ============================================================
+
+// HideToTray 隐藏到托盘
+func (a *App) HideToTray() {
+	a.trayManager.HideToTray()
+}
+
+// ShowWindow 显示窗口
+func (a *App) ShowWindow() {
+	a.trayManager.ShowWindow()
+}
+
+// SetCloseToTray 设置关闭到托盘
+func (a *App) SetCloseToTray(enabled bool) {
+	a.closeToTray = enabled
+	logger.Infof("Close to tray: %v", enabled)
+}
+
+// GetCloseToTray 获取关闭到托盘设置
+func (a *App) GetCloseToTray() bool {
+	return a.closeToTray
+}
+
+// ============================================================
+// 自启动管理
+// ============================================================
+
+// IsAutostartEnabled 检查是否启用自启动
+func (a *App) IsAutostartEnabled() bool {
+	if a.autostartManager == nil {
+		return false
+	}
+	return a.autostartManager.IsEnabled()
+}
+
+// SetAutostart 设置自启动
+func (a *App) SetAutostart(enabled bool, silent bool) error {
+	if a.autostartManager == nil {
+		return fmt.Errorf("autostart manager not initialized")
+	}
+
+	if enabled {
+		return a.autostartManager.Enable(silent)
+	}
+	return a.autostartManager.Disable()
+}
+
+// IsAutostartSilent 检查是否为静默启动
+func (a *App) IsAutostartSilent() bool {
+	if a.autostartManager == nil {
+		return false
+	}
+	return a.autostartManager.IsSilentMode()
 }
 
 // ============================================================
