@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -71,13 +72,18 @@ func NewApp() *App {
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
 
-	// 初始化系统托盘
-	iconData, err := os.ReadFile("build/appicon.png")
-	if err != nil {
-		logger.Warnf("Failed to load tray icon: %v", err)
-		iconData = nil
-	}
-	a.trayManager.Setup(ctx, iconData)
+	// 延迟初始化系统托盘，避免启动时的竞态条件
+	// 注意：systray 库在 Windows 上可能会输出 "The operation completed successfully" 错误日志
+	// 这是 Windows API 的正常行为，不影响功能，可以忽略
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		iconData, err := os.ReadFile("build/appicon.png")
+		if err != nil {
+			logger.Warnf("Failed to load tray icon: %v", err)
+			iconData = nil
+		}
+		a.trayManager.Setup(ctx, iconData)
+	}()
 
 	logger.Info("Application started")
 }
@@ -434,7 +440,7 @@ func (a *App) GetCacheStats() (map[string]int, error) {
 
 // GetAppVersion 获取应用版本
 func (a *App) GetAppVersion() string {
-	return "1.0.3"
+	return "1.0.4"
 }
 
 // VersionInfo 版本信息
@@ -446,11 +452,103 @@ type VersionInfo struct {
 	ReleaseNotes   string `json:"releaseNotes"`
 }
 
+// updateCache 更新检查缓存
+type updateCache struct {
+	Version      string    `json:"version"`
+	UpdateURL    string    `json:"updateUrl"`
+	ReleaseNotes string    `json:"releaseNotes"`
+	CheckedAt    time.Time `json:"checkedAt"`
+}
+
 // CheckForUpdates 检查更新
 func (a *App) CheckForUpdates() (VersionInfo, error) {
 	currentVersion := a.GetAppVersion()
 
-	// 发起 HTTP 请求获取最新版本
+	// 检查缓存（24小时内不重复请求）
+	cacheFile := filepath.Join(os.TempDir(), "wemediaspider_update_cache.json")
+	if cached, ok := a.loadUpdateCache(cacheFile); ok {
+		if time.Since(cached.CheckedAt) < 24*time.Hour {
+			logger.Info("使用缓存的更新信息")
+			hasUpdate := compareVersions(cached.Version, currentVersion) > 0
+			return VersionInfo{
+				CurrentVersion: currentVersion,
+				LatestVersion:  cached.Version,
+				HasUpdate:      hasUpdate,
+				UpdateURL:      cached.UpdateURL,
+				ReleaseNotes:   cached.ReleaseNotes,
+			}, nil
+		}
+	}
+
+	// 方案1: 尝试使用 jsdelivr CDN（不受速率限制）
+	latestVersion, updateURL, releaseNotes, err := a.checkUpdateViaCDN()
+	if err == nil {
+		// 保存到缓存
+		a.saveUpdateCache(cacheFile, updateCache{
+			Version:      latestVersion,
+			UpdateURL:    updateURL,
+			ReleaseNotes: releaseNotes,
+			CheckedAt:    time.Now(),
+		})
+
+		hasUpdate := compareVersions(latestVersion, currentVersion) > 0
+		logger.Infof("当前版本: %s, 最新版本: %s, 有更新: %v", currentVersion, latestVersion, hasUpdate)
+
+		return VersionInfo{
+			CurrentVersion: currentVersion,
+			LatestVersion:  latestVersion,
+			HasUpdate:      hasUpdate,
+			UpdateURL:      updateURL,
+			ReleaseNotes:   releaseNotes,
+		}, nil
+	}
+
+	logger.Warnf("CDN 检查失败，尝试 GitHub API: %v", err)
+
+	// 方案2: 回退到 GitHub API
+	return a.checkUpdateViaGitHubAPI(currentVersion, cacheFile)
+}
+
+// checkUpdateViaCDN 通过 jsdelivr CDN 检查更新
+func (a *App) checkUpdateViaCDN() (version, updateURL, releaseNotes string, err error) {
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	// 使用 jsdelivr 获取 releases 信息
+	req, err := http.NewRequest("GET", "https://cdn.jsdelivr.net/gh/vag-Zhao/WeMediaSpider-Go@latest/version.json", nil)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", "", "", fmt.Errorf("CDN 返回状态码: %d", resp.StatusCode)
+	}
+
+	var versionInfo struct {
+		Version      string `json:"version"`
+		UpdateURL    string `json:"updateUrl"`
+		ReleaseNotes string `json:"releaseNotes"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&versionInfo); err != nil {
+		return "", "", "", err
+	}
+
+	return strings.TrimPrefix(versionInfo.Version, "v"),
+		versionInfo.UpdateURL,
+		versionInfo.ReleaseNotes,
+		nil
+}
+
+// checkUpdateViaGitHubAPI 通过 GitHub API 检查更新（回退方案）
+func (a *App) checkUpdateViaGitHubAPI(currentVersion, cacheFile string) (VersionInfo, error) {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
@@ -465,7 +563,6 @@ func (a *App) CheckForUpdates() (VersionInfo, error) {
 		}, nil
 	}
 
-	// 添加 User-Agent 请求头，GitHub API 要求
 	req.Header.Set("User-Agent", "WeMediaSpider-Go/"+currentVersion)
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
@@ -481,7 +578,11 @@ func (a *App) CheckForUpdates() (VersionInfo, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		logger.Warnf("检查更新失败，状态码: %d", resp.StatusCode)
+		if resp.StatusCode == 403 {
+			logger.Warnf("GitHub API 速率限制，将在 24 小时后重试")
+		} else {
+			logger.Warnf("检查更新失败，状态码: %d", resp.StatusCode)
+		}
 		return VersionInfo{
 			CurrentVersion: currentVersion,
 			LatestVersion:  currentVersion,
@@ -504,12 +605,17 @@ func (a *App) CheckForUpdates() (VersionInfo, error) {
 		}, nil
 	}
 
-	// 移除 tag_name 中的 'v' 前缀
 	latestVersion := strings.TrimPrefix(release.TagName, "v")
 
-	// 比较版本号
-	hasUpdate := compareVersions(latestVersion, currentVersion) > 0
+	// 保存到缓存
+	a.saveUpdateCache(cacheFile, updateCache{
+		Version:      latestVersion,
+		UpdateURL:    release.HTMLURL,
+		ReleaseNotes: release.Body,
+		CheckedAt:    time.Now(),
+	})
 
+	hasUpdate := compareVersions(latestVersion, currentVersion) > 0
 	logger.Infof("当前版本: %s, 最新版本: %s, 有更新: %v", currentVersion, latestVersion, hasUpdate)
 
 	return VersionInfo{
@@ -519,6 +625,34 @@ func (a *App) CheckForUpdates() (VersionInfo, error) {
 		UpdateURL:      release.HTMLURL,
 		ReleaseNotes:   release.Body,
 	}, nil
+}
+
+// loadUpdateCache 加载更新缓存
+func (a *App) loadUpdateCache(cacheFile string) (updateCache, bool) {
+	data, err := os.ReadFile(cacheFile)
+	if err != nil {
+		return updateCache{}, false
+	}
+
+	var cache updateCache
+	if err := json.Unmarshal(data, &cache); err != nil {
+		return updateCache{}, false
+	}
+
+	return cache, true
+}
+
+// saveUpdateCache 保存更新缓存
+func (a *App) saveUpdateCache(cacheFile string, cache updateCache) {
+	data, err := json.Marshal(cache)
+	if err != nil {
+		logger.Warnf("保存更新缓存失败: %v", err)
+		return
+	}
+
+	if err := os.WriteFile(cacheFile, data, 0644); err != nil {
+		logger.Warnf("写入更新缓存失败: %v", err)
+	}
 }
 
 // compareVersions 比较两个版本号，返回 1 表示 v1 > v2，-1 表示 v1 < v2，0 表示相等

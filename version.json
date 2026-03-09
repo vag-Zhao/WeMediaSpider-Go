@@ -1,0 +1,5 @@
+{
+  "version": "1.0.4",
+  "updateUrl": "https://github.com/vag-Zhao/WeMediaSpider-Go/releases/latest",
+  "releaseNotes": "优化更新检查机制，添加本地缓存和 CDN 支持，避免 GitHub API 速率限制"
+}
