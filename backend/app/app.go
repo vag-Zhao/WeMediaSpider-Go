@@ -26,17 +26,20 @@ import (
 
 // App 应用结构
 type App struct {
-	ctx              context.Context
-	loginManager     *spider.LoginManager
-	scraper          *spider.AsyncScraper
-	configManager    *config.Manager
-	cacheManager     *cache.Manager
-	imageDownloader  *spider.ImageDownloader
-	dataManager      *config.DataManager
-	storageManager   *storage.Manager
-	trayManager      *tray.Manager
-	autostartManager *autostart.Manager
-	closeToTray      bool // 关闭到托盘
+	ctx                 context.Context
+	loginManager        *spider.LoginManager
+	scraper             *spider.AsyncScraper
+	configManager       *config.Manager
+	systemConfigManager *config.SystemConfigManager
+	cacheManager        *cache.Manager
+	imageDownloader     *spider.ImageDownloader
+	dataManager         *config.DataManager
+	storageManager      *storage.Manager
+	trayManager         *tray.Manager
+	autostartManager    *autostart.Manager
+	closeToTray         bool // 关闭到托盘
+	rememberChoice      bool // 记住用户选择
+	forceQuit           bool // 强制退出标志
 }
 
 // NewApp 创建应用实例
@@ -56,15 +59,35 @@ func NewApp() *App {
 		logger.Errorf("Failed to create autostart manager: %v", err)
 	}
 
+	// 创建系统配置管理器
+	systemConfigManager, err := config.NewSystemConfigManager()
+	if err != nil {
+		logger.Errorf("Failed to create system config manager: %v", err)
+	}
+
+	// 加载系统配置
+	systemConfig := config.SystemConfig{
+		CloseToTray:    true,
+		RememberChoice: false,
+	}
+	if systemConfigManager != nil {
+		loadedConfig, err := systemConfigManager.Load()
+		if err == nil {
+			systemConfig = loadedConfig
+		}
+	}
+
 	return &App{
-		loginManager:     spider.NewLoginManager(),
-		configManager:    config.NewManager(),
-		cacheManager:     cacheManager,
-		dataManager:      config.NewDataManager(),
-		storageManager:   storage.NewManager(),
-		trayManager:      tray.NewManager(),
-		autostartManager: autostartManager,
-		closeToTray:      true, // 默认关闭到托盘
+		loginManager:        spider.NewLoginManager(),
+		configManager:       config.NewManager(),
+		systemConfigManager: systemConfigManager,
+		cacheManager:        cacheManager,
+		dataManager:         config.NewDataManager(),
+		storageManager:      storage.NewManager(),
+		trayManager:         tray.NewManager(),
+		autostartManager:    autostartManager,
+		closeToTray:         systemConfig.CloseToTray,
+		rememberChoice:      systemConfig.RememberChoice,
 	}
 }
 
@@ -77,15 +100,41 @@ func (a *App) Startup(ctx context.Context) {
 	// 这是 Windows API 的正常行为，不影响功能，可以忽略
 	go func() {
 		time.Sleep(500 * time.Millisecond)
-		iconData, err := os.ReadFile("build/appicon.png")
-		if err != nil {
-			logger.Warnf("Failed to load tray icon: %v", err)
-			iconData = nil
+
+		// 尝试加载 ICO 图标文件
+		iconPaths := []string{
+			"icon.ico",
+			"build/appicon.png",
+			"appicon.png",
 		}
-		a.trayManager.Setup(ctx, iconData)
+
+		var iconData []byte
+		var err error
+		var loadedPath string
+
+		for _, path := range iconPaths {
+			iconData, err = os.ReadFile(path)
+			if err == nil {
+				loadedPath = path
+				break
+			}
+		}
+
+		if err != nil {
+			logger.Warnf("Failed to load tray icon from all paths, using default")
+			iconData = nil
+		} else {
+			logger.Infof("Loaded tray icon from: %s", loadedPath)
+		}
+
+		// 传递退出回调函数
+		a.trayManager.Setup(ctx, iconData, func() {
+			a.ForceQuit()
+		})
 	}()
 
-	logger.Info("Application started")
+	// 输出当前系统配置状态
+	logger.Infof("Application started - CloseToTray: %v, RememberChoice: %v", a.closeToTray, a.rememberChoice)
 }
 
 // Shutdown 应用关闭时调用
@@ -114,11 +163,71 @@ func (a *App) ShowWindow() {
 func (a *App) SetCloseToTray(enabled bool) {
 	a.closeToTray = enabled
 	logger.Infof("Close to tray: %v", enabled)
+
+	// 保存到配置文件
+	a.saveSystemConfig()
+
+	// 发送配置更新事件到前端
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, "system-config-changed", map[string]interface{}{
+			"closeToTray":    a.closeToTray,
+			"rememberChoice": a.rememberChoice,
+		})
+	}
 }
 
 // GetCloseToTray 获取关闭到托盘设置
 func (a *App) GetCloseToTray() bool {
 	return a.closeToTray
+}
+
+// SetRememberChoice 设置是否记住用户选择
+func (a *App) SetRememberChoice(remember bool) {
+	a.rememberChoice = remember
+	logger.Infof("Remember choice: %v", remember)
+
+	// 保存到配置文件
+	a.saveSystemConfig()
+
+	// 发送配置更新事件到前端
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, "system-config-changed", map[string]interface{}{
+			"closeToTray":    a.closeToTray,
+			"rememberChoice": a.rememberChoice,
+		})
+	}
+}
+
+// GetRememberChoice 获取是否记住用户选择
+func (a *App) GetRememberChoice() bool {
+	return a.rememberChoice
+}
+
+// saveSystemConfig 保存系统配置到文件
+func (a *App) saveSystemConfig() {
+	if a.systemConfigManager == nil {
+		return
+	}
+
+	config := config.SystemConfig{
+		CloseToTray:    a.closeToTray,
+		RememberChoice: a.rememberChoice,
+	}
+
+	if err := a.systemConfigManager.Save(config); err != nil {
+		logger.Errorf("Failed to save system config: %v", err)
+	}
+}
+
+// ForceQuit 强制退出程序
+func (a *App) ForceQuit() {
+	a.forceQuit = true
+	runtime.Quit(a.ctx)
+}
+
+// ShouldBlockClose 检查是否应该阻止关闭
+func (a *App) ShouldBlockClose() bool {
+	return !a.forceQuit
 }
 
 // ============================================================
@@ -515,8 +624,8 @@ func (a *App) checkUpdateViaCDN() (version, updateURL, releaseNotes string, err 
 		Timeout: 10 * time.Second,
 	}
 
-	// 使用 jsdelivr 获取 releases 信息
-	req, err := http.NewRequest("GET", "https://cdn.jsdelivr.net/gh/vag-Zhao/WeMediaSpider-Go@latest/version.json", nil)
+	// 使用 jsdelivr 获取 releases 信息（使用正确的 URL 格式）
+	req, err := http.NewRequest("GET", "https://cdn.jsdelivr.net/gh/vag-Zhao/WeMediaSpider-Go@main/version.json", nil)
 	if err != nil {
 		return "", "", "", err
 	}

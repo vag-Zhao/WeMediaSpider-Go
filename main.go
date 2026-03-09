@@ -47,12 +47,8 @@ func main() {
 		},
 		OnShutdown: application.Shutdown,
 		OnBeforeClose: func(ctx context.Context) bool {
-			// 如果启用了关闭到托盘，则隐藏窗口而不是退出
-			if application.GetCloseToTray() {
-				application.HideToTray()
-				return true // 阻止关闭
-			}
-			return false // 允许关闭
+			// 检查是否应该阻止关闭
+			return application.ShouldBlockClose()
 		},
 		Bind: []interface{}{
 			application,

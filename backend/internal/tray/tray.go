@@ -2,6 +2,7 @@ package tray
 
 import (
 	"context"
+	"time"
 
 	"WeMediaSpider/backend/pkg/logger"
 
@@ -15,6 +16,7 @@ type Manager struct {
 	onShow     func()
 	onQuit     func()
 	isHidden   bool
+	quitFunc   func() // 退出回调函数
 }
 
 // NewManager 创建托盘管理器
@@ -25,8 +27,9 @@ func NewManager() *Manager {
 }
 
 // Setup 设置托盘
-func (m *Manager) Setup(ctx context.Context, iconData []byte) {
+func (m *Manager) Setup(ctx context.Context, iconData []byte, quitFunc func()) {
 	m.ctx = ctx
+	m.quitFunc = quitFunc
 
 	go func() {
 		systray.Run(func() {
@@ -43,8 +46,14 @@ func (m *Manager) Setup(ctx context.Context, iconData []byte) {
 func (m *Manager) onReady(iconData []byte) {
 	// 设置托盘图标
 	if len(iconData) > 0 {
+		// 忽略 SetIcon 的错误，因为 Windows 会报告误导性的错误
+		// "The operation completed successfully" 实际上表示成功
 		systray.SetIcon(iconData)
+	} else {
+		// 如果没有图标数据，使用默认图标（空图标）
+		logger.Warn("No icon data provided, using default icon")
 	}
+
 	systray.SetTitle("WeMediaSpider")
 	systray.SetTooltip("微信公众号爬虫")
 
@@ -57,11 +66,14 @@ func (m *Manager) onReady(iconData []byte) {
 
 	// 监听菜单点击
 	go func() {
+		logger.Info("Tray menu listener started")
 		for {
 			select {
 			case <-mShow.ClickedCh:
+				logger.Info("Show window menu item clicked")
 				m.ShowWindow()
 			case <-mQuit.ClickedCh:
+				logger.Info("Quit menu item clicked")
 				m.Quit()
 				return
 			}
@@ -80,18 +92,59 @@ func (m *Manager) HideToTray() {
 
 // ShowWindow 显示窗口
 func (m *Manager) ShowWindow() {
-	if m.ctx != nil {
-		runtime.WindowShow(m.ctx)
-		runtime.WindowUnminimise(m.ctx)
-		m.isHidden = false
-		logger.Info("Window shown from tray")
+	logger.Info("ShowWindow called")
+
+	if m.ctx == nil {
+		logger.Error("Context is nil, cannot show window")
+		return
 	}
+
+	logger.Info("Attempting to show window...")
+
+	// 强制显示窗口 - 使用多次调用确保生效
+	runtime.WindowShow(m.ctx)
+	runtime.WindowShow(m.ctx) // 第二次调用确保生效
+	logger.Info("WindowShow called (x2)")
+
+	// 取消最小化
+	runtime.WindowUnminimise(m.ctx)
+	runtime.WindowUnminimise(m.ctx) // 第二次调用确保生效
+	logger.Info("WindowUnminimise called (x2)")
+
+	// 强制置顶并保持一段时间
+	runtime.WindowSetAlwaysOnTop(m.ctx, true)
+	logger.Info("WindowSetAlwaysOnTop(true) called")
+
+	// 延迟后再取消置顶和居中
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		if m.ctx != nil {
+			// 居中窗口
+			runtime.WindowCenter(m.ctx)
+			logger.Info("WindowCenter called (delayed)")
+
+			time.Sleep(100 * time.Millisecond)
+
+			// 取消置顶
+			runtime.WindowSetAlwaysOnTop(m.ctx, false)
+			logger.Info("WindowSetAlwaysOnTop(false) called")
+		}
+	}()
+
+	m.isHidden = false
+	logger.Info("Window shown from tray - completed")
 }
 
 // Quit 退出应用
 func (m *Manager) Quit() {
-	if m.ctx != nil {
-		runtime.Quit(m.ctx)
+	logger.Info("Tray quit requested")
+	if m.quitFunc != nil {
+		m.quitFunc()
+	} else {
+		// 回退方案
+		if m.ctx != nil {
+			runtime.Quit(m.ctx)
+		}
 	}
 	systray.Quit()
 }

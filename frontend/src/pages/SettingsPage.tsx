@@ -80,6 +80,12 @@ const SettingsPage: React.FC = () => {
       const autostartValue = await IsAutostartEnabled()
       const silentValue = await IsAutostartSilent()
 
+      console.log('加载系统设置:', {
+        closeToTray: closeToTrayValue,
+        autostart: autostartValue,
+        silent: silentValue
+      })
+
       setCloseToTray(closeToTrayValue)
       setAutostartEnabled(autostartValue)
       setAutostartSilent(silentValue)
@@ -91,8 +97,15 @@ const SettingsPage: React.FC = () => {
   // 处理关闭到托盘切换
   const handleCloseToTrayChange = async (checked: boolean) => {
     try {
-      const { SetCloseToTray } = await import('../../wailsjs/go/app/App')
+      const { SetCloseToTray, SetRememberChoice } = await import('../../wailsjs/go/app/App')
       await SetCloseToTray(checked)
+      // 只有当用户打开"关闭到托盘"时，才自动记住选择
+      // 如果用户关闭该功能，则清除记住选择，下次会弹窗询问
+      if (checked) {
+        await SetRememberChoice(true)
+      } else {
+        await SetRememberChoice(false)
+      }
       setCloseToTray(checked)
       message.success(checked ? '已启用关闭到托盘' : '已禁用关闭到托盘')
     } catch (error: any) {
@@ -129,6 +142,23 @@ const SettingsPage: React.FC = () => {
 
   useEffect(() => {
     loadConfig()
+
+    // 监听系统配置变化事件
+    import('../../wailsjs/runtime/runtime').then(({ EventsOn, EventsOff }) => {
+      const handleSystemConfigChanged = (data: any) => {
+        console.log('系统配置已更新:', data)
+        if (data.closeToTray !== undefined) {
+          setCloseToTray(data.closeToTray)
+        }
+      }
+
+      EventsOn('system-config-changed', handleSystemConfigChanged)
+
+      // 清理函数
+      return () => {
+        EventsOff('system-config-changed')
+      }
+    })
   }, [])
 
   // 自动保存配置（延迟100ms）
@@ -349,11 +379,11 @@ const SettingsPage: React.FC = () => {
             background: 'rgba(255, 255, 255, 0.02)',
             borderRadius: 6,
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <EyeInvisibleOutlined style={{ color: '#07C160', fontSize: 18 }} />
-              <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
+              <EyeInvisibleOutlined style={{ color: '#07C160', fontSize: 18, flexShrink: 0 }} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1 }}>
                 <div style={{ color: '#fff', fontSize: 14, fontWeight: 500 }}>关闭到托盘</div>
-                <div style={{ color: 'rgba(255, 255, 255, 0.45)', fontSize: 12, marginTop: 4 }}>
+                <div style={{ color: 'rgba(255, 255, 255, 0.45)', fontSize: 12, marginLeft: 16 }}>
                   点击关闭按钮时最小化到系统托盘，而不是退出程序
                 </div>
               </div>
@@ -361,6 +391,7 @@ const SettingsPage: React.FC = () => {
             <Switch
               checked={closeToTray}
               onChange={handleCloseToTrayChange}
+              style={{ marginLeft: 16, flexShrink: 0 }}
             />
           </div>
 
@@ -375,11 +406,11 @@ const SettingsPage: React.FC = () => {
             background: 'rgba(255, 255, 255, 0.02)',
             borderRadius: 6,
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <RocketOutlined style={{ color: '#07C160', fontSize: 18 }} />
-              <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
+              <RocketOutlined style={{ color: '#07C160', fontSize: 18, flexShrink: 0 }} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1 }}>
                 <div style={{ color: '#fff', fontSize: 14, fontWeight: 500 }}>开机自启动</div>
-                <div style={{ color: 'rgba(255, 255, 255, 0.45)', fontSize: 12, marginTop: 4 }}>
+                <div style={{ color: 'rgba(255, 255, 255, 0.45)', fontSize: 12, marginLeft: 16 }}>
                   Windows 启动时自动运行本程序
                 </div>
               </div>
@@ -387,6 +418,7 @@ const SettingsPage: React.FC = () => {
             <Switch
               checked={autostartEnabled}
               onChange={handleAutostartChange}
+              style={{ marginLeft: 16, flexShrink: 0 }}
             />
           </div>
 
@@ -401,18 +433,55 @@ const SettingsPage: React.FC = () => {
               borderRadius: 6,
               marginLeft: 20,
             }}>
-              <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1 }}>
                 <div style={{ color: '#fff', fontSize: 14, fontWeight: 500 }}>静默启动</div>
-                <div style={{ color: 'rgba(255, 255, 255, 0.45)', fontSize: 12, marginTop: 4 }}>
+                <div style={{ color: 'rgba(255, 255, 255, 0.45)', fontSize: 12, marginLeft: 16 }}>
                   启动时直接最小化到托盘，不显示主窗口
                 </div>
               </div>
               <Switch
                 checked={autostartSilent}
                 onChange={handleSilentChange}
+                style={{ marginLeft: 16, flexShrink: 0 }}
               />
             </div>
           )}
+
+          <Divider style={{ margin: 0, borderColor: 'rgba(255, 255, 255, 0.08)' }} />
+
+          {/* 重置关闭选择 */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '12px 16px',
+            background: 'rgba(255, 255, 255, 0.02)',
+            borderRadius: 6,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 1 }}>
+                <div style={{ color: '#fff', fontSize: 14, fontWeight: 500 }}>重置关闭选择</div>
+                <div style={{ color: 'rgba(255, 255, 255, 0.45)', fontSize: 12, marginLeft: 16 }}>
+                  清除"记住我的选择"设置，下次关闭时重新询问
+                </div>
+              </div>
+            </div>
+            <Button
+              size="small"
+              onClick={async () => {
+                try {
+                  const { SetRememberChoice } = await import('../../wailsjs/go/app/App')
+                  await SetRememberChoice(false)
+                  message.success('已重置关闭选择')
+                } catch (error: any) {
+                  message.error('重置失败: ' + (error.message || '未知错误'))
+                }
+              }}
+              style={{ marginLeft: 16, flexShrink: 0 }}
+            >
+              重置
+            </Button>
+          </div>
         </div>
       </Card>
     </div>

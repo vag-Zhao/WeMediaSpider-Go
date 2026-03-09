@@ -46,6 +46,10 @@ export function ExtractArticleImages(arg1) {
   return window['go']['app']['App']['ExtractArticleImages'](arg1);
 }
 
+export function ForceQuit() {
+  return window['go']['app']['App']['ForceQuit']();
+}
+
 export function GetAppData() {
   return window['go']['app']['App']['GetAppData']();
 }
@@ -72,6 +76,10 @@ export function GetDefaultConfig() {
 
 export function GetLoginStatus() {
   return window['go']['app']['App']['GetLoginStatus']();
+}
+
+export function GetRememberChoice() {
+  return window['go']['app']['App']['GetRememberChoice']();
 }
 
 export function HideToTray() {
@@ -136,6 +144,14 @@ export function SetAutostart(arg1, arg2) {
 
 export function SetCloseToTray(arg1) {
   return window['go']['app']['App']['SetCloseToTray'](arg1);
+}
+
+export function SetRememberChoice(arg1) {
+  return window['go']['app']['App']['SetRememberChoice'](arg1);
+}
+
+export function ShouldBlockClose() {
+  return window['go']['app']['App']['ShouldBlockClose']();
 }
 
 export function ShowWindow() {

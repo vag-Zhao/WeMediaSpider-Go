@@ -29,6 +29,8 @@ export function ExportCredentials():Promise<string>;
 
 export function ExtractArticleImages(arg1:string):Promise<Array<spider.ImageInfo>>;
 
+export function ForceQuit():Promise<void>;
+
 export function GetAppData():Promise<models.AppData>;
 
 export function GetAppVersion():Promise<string>;
@@ -42,6 +44,8 @@ export function GetDataDirectory():Promise<string>;
 export function GetDefaultConfig():Promise<models.Config>;
 
 export function GetLoginStatus():Promise<models.LoginStatus>;
+
+export function GetRememberChoice():Promise<boolean>;
 
 export function HideToTray():Promise<void>;
 
@@ -74,6 +78,10 @@ export function SelectSaveFile(arg1:string,arg2:Array<frontend.FileFilter>):Prom
 export function SetAutostart(arg1:boolean,arg2:boolean):Promise<void>;
 
 export function SetCloseToTray(arg1:boolean):Promise<void>;
+
+export function SetRememberChoice(arg1:boolean):Promise<void>;
+
+export function ShouldBlockClose():Promise<boolean>;
 
 export function ShowWindow():Promise<void>;
 
