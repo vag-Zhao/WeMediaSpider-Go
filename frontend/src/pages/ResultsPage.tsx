@@ -21,6 +21,7 @@ import {
   List,
   Empty,
   Tooltip,
+  Collapse,
 } from 'antd'
 import {
   ExportOutlined,
@@ -40,6 +41,7 @@ import {
   FileTextOutlined,
   ClockCircleOutlined,
   TeamOutlined,
+  CaretRightOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { useScrapeStore } from '../stores/scrapeStore'
@@ -48,6 +50,7 @@ import type { Article } from '../types'
 
 const { Search } = Input
 const { RangePicker } = DatePicker
+const { Panel } = Collapse
 
 // 网盘链接类型
 interface CloudDriveLink {
@@ -268,7 +271,19 @@ const ResultsPage: React.FC = () => {
     try {
       setLoadingFiles(true)
       const files = await (window as any).go.app.App.ListDataFiles()
-      setDataFiles(files || [])
+      // 为每个文件加载文章列表
+      const filesWithArticles = await Promise.all(
+        (files || []).map(async (file: any) => {
+          try {
+            const articles = await (window as any).go.app.App.LoadDataFile(file.filepath)
+            return { ...file, articles: articles || [] }
+          } catch (error) {
+            console.error('Failed to load articles for file:', file.filepath, error)
+            return { ...file, articles: [] }
+          }
+        })
+      )
+      setDataFiles(filesWithArticles)
     } catch (error: any) {
       message.error('加载文件列表失败: ' + (error.message || '未知错误'))
     } finally {
@@ -1021,11 +1036,38 @@ const ResultsPage: React.FC = () => {
         }
         open={importModalVisible}
         onCancel={() => setImportModalVisible(false)}
-        width={800}
+        width={900}
         centered
         footer={null}
         styles={{ body: { maxHeight: 'calc(100vh - 300px)', overflow: 'auto' } }}
       >
+        <style>{`
+          /* 固定 Collapse 标题位置 */
+          .ant-collapse-item > .ant-collapse-header {
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 10 !important;
+            background: #1a1a1a !important;
+            display: flex !important;
+            align-items: center !important;
+            width: 100% !important;
+          }
+
+          /* 展开时保持标题固定 */
+          .ant-collapse-item-active > .ant-collapse-header {
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 10 !important;
+          }
+
+          /* 确保标题内容区域占满剩余空间 */
+          .ant-collapse-header-text {
+            flex: 1 !important;
+            display: flex !important;
+            align-items: center !important;
+            width: 100% !important;
+          }
+        `}</style>
         {loadingFiles ? (
           <div style={{ textAlign: 'center', padding: 40 }}>
             <Spin size="large" />
@@ -1036,112 +1078,161 @@ const ResultsPage: React.FC = () => {
             style={{ padding: 40 }}
           />
         ) : (
-          <List
-            dataSource={dataFiles}
-            renderItem={(file: any) => (
-              <div
+          <Collapse
+            bordered={false}
+            expandIcon={({ isActive }) => <CaretRightOutlined rotate={isActive ? 90 : 0} />}
+            style={{ background: 'transparent' }}
+            collapsible="header"
+          >
+            {dataFiles.map((file: any) => (
+              <Panel
                 key={file.filepath}
-                style={{
-                  background: '#1a1a1a',
-                  marginBottom: 8,
-                  padding: '12px 16px',
-                  borderRadius: 8,
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                }}
-              >
-                {/* 图标 */}
-                <div style={{
-                  width: 80,
-                  height: 80,
-                  borderRadius: 6,
-                  background: 'linear-gradient(135deg, rgba(7, 193, 96, 0.2) 0%, rgba(7, 193, 96, 0.1) 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: '1px solid rgba(7, 193, 96, 0.3)',
-                  flexShrink: 0,
-                }}>
-                  <FileTextOutlined style={{ fontSize: 20, color: '#07C160' }} />
-                </div>
+                header={
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+                    {/* 图标 */}
+                    <div style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 6,
+                      background: 'linear-gradient(135deg, rgba(7, 193, 96, 0.2) 0%, rgba(7, 193, 96, 0.1) 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: '1px solid rgba(7, 193, 96, 0.3)',
+                      flexShrink: 0,
+                    }}>
+                      <FileTextOutlined style={{ fontSize: 16, color: '#07C160' }} />
+                    </div>
 
-                {/* 内容区 */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ marginBottom: 4 }}>
-                    <Space size={8}>
-                      <span style={{ fontSize: 13, fontWeight: 500 }}>{file.filename}</span>
-                      <Tag color="blue" style={{ fontSize: 11, padding: '0 6px', lineHeight: '18px' }}>
+                    {/* 内容区 */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 14, fontWeight: 500, lineHeight: '20px' }}>{file.filename}</span>
+                      <span style={{ fontSize: 12, color: '#999', lineHeight: '20px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <ClockCircleOutlined style={{ fontSize: 12 }} /> <span>{file.saveTime}</span>
+                      </span>
+                      <Tag color="blue" style={{ fontSize: 11, padding: '0 6px', lineHeight: '18px', margin: 0 }}>
                         {file.totalCount} 篇
                       </Tag>
-                    </Space>
-                  </div>
-                  <div style={{ fontSize: 12, color: '#999' }}>
-                    <Space size={12} style={{ marginBottom: 4 }}>
-                      <span>
-                        <ClockCircleOutlined /> {file.saveTime}
-                      </span>
-                      <span>
-                        <TeamOutlined /> {file.accounts?.length || 0} 个公众号
-                      </span>
-                      <span>
-                        {(file.fileSize / 1024).toFixed(1)} KB
-                      </span>
-                    </Space>
-                    {file.accounts && file.accounts.length > 0 && (
-                      <div style={{ marginTop: 6 }}>
-                        {file.accounts.slice(0, 5).map((account: string) => (
-                          <Tag key={account} style={{ marginBottom: 4, fontSize: 11, padding: '0 6px', lineHeight: '18px' }}>
-                            {account}
-                          </Tag>
-                        ))}
-                        {file.accounts.length > 5 && (
-                          <Tooltip title={file.accounts.slice(5).join(', ')}>
-                            <Tag style={{ fontSize: 11, padding: '0 6px', lineHeight: '18px' }}>
-                              +{file.accounts.length - 5}
-                            </Tag>
-                          </Tooltip>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
+                    </div>
 
-                {/* 操作按钮 */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-                  <Button
-                    type="primary"
-                    size="small"
-                    icon={<ImportOutlined />}
-                    onClick={() => handleImportData(file.filepath, 'replace')}
-                    loading={loadingData}
-                    style={{ width: 90 }}
-                  >
-                    覆盖导入
-                  </Button>
-                  <Button
-                    size="small"
-                    icon={<ImportOutlined />}
-                    onClick={() => handleImportData(file.filepath, 'append')}
-                    loading={loadingData}
-                    style={{ width: 90 }}
-                  >
-                    追加导入
-                  </Button>
-                  <Button
-                    danger
-                    size="small"
-                    icon={<DeleteOutlined />}
-                    onClick={() => handleDeleteDataFile(file.filepath)}
-                    style={{ width: 90 }}
-                  >
-                    删除
-                  </Button>
+                    {/* 操作按钮 */}
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0, marginLeft: 'auto' }} onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        type="primary"
+                        size="small"
+                        icon={<ImportOutlined />}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleImportData(file.filepath, 'replace')
+                        }}
+                        loading={loadingData}
+                      >
+                        覆盖导入
+                      </Button>
+                      <Button
+                        size="small"
+                        icon={<ImportOutlined />}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleImportData(file.filepath, 'append')
+                        }}
+                        loading={loadingData}
+                      >
+                        追加导入
+                      </Button>
+                      <Button
+                        danger
+                        size="small"
+                        icon={<DeleteOutlined />}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteDataFile(file.filepath)
+                        }}
+                      >
+                        删除
+                      </Button>
+                    </div>
+                  </div>
+                }
+                style={{
+                  marginBottom: 8,
+                  background: '#1a1a1a',
+                  borderRadius: 8,
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                }}
+              >
+                {/* 展开后显示文章列表 */}
+                <div style={{ paddingLeft: 60 }}>
+                  {file.articles && file.articles.length > 0 && (
+                    <div
+                      style={{
+                        maxHeight: '400px',
+                        overflowY: 'auto',
+                        paddingRight: 8,
+                        // 自定义滚动条样式
+                        scrollbarWidth: 'thin',
+                        scrollbarColor: '#333 #1a1a1a',
+                      }}
+                      onWheel={(e) => {
+                        const target = e.currentTarget
+                        const atTop = target.scrollTop === 0
+                        const atBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 1
+
+                        // 如果在顶部向上滚动，或在底部向下滚动，阻止事件冒泡
+                        if ((atTop && e.deltaY < 0) || (atBottom && e.deltaY > 0)) {
+                          e.stopPropagation()
+                        }
+                      }}
+                    >
+                      <style>{`
+                        div::-webkit-scrollbar {
+                          width: 6px;
+                        }
+                        div::-webkit-scrollbar-track {
+                          background: #1a1a1a;
+                          border-radius: 3px;
+                        }
+                        div::-webkit-scrollbar-thumb {
+                          background: #333;
+                          border-radius: 3px;
+                        }
+                        div::-webkit-scrollbar-thumb:hover {
+                          background: #444;
+                        }
+                      `}</style>
+                      <List
+                        size="small"
+                        dataSource={file.articles}
+                        renderItem={(article: Article) => (
+                          <List.Item
+                            style={{
+                              padding: '8px 12px',
+                              background: '#0d0d0d',
+                              marginBottom: 4,
+                              borderRadius: 4,
+                              border: '1px solid rgba(255, 255, 255, 0.05)',
+                            }}
+                          >
+                            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <Tag color="blue" style={{ fontSize: 11, padding: '0 4px', lineHeight: '16px', margin: 0, flexShrink: 0 }}>
+                                {article.accountName}
+                              </Tag>
+                              <span style={{ fontSize: 13, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                                {article.title}
+                              </span>
+                              <span style={{ fontSize: 11, color: '#666', flexShrink: 0, marginLeft: 'auto' }}>
+                                {article.publishTime}
+                              </span>
+                            </div>
+                          </List.Item>
+                        )}
+                      />
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
-          />
+              </Panel>
+            ))}
+          </Collapse>
         )}
       </Modal>
     </div>

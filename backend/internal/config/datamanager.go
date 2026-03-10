@@ -1,5 +1,8 @@
 package config
 
+// Deprecated: 此模块已废弃，请使用 backend/internal/repository/stats_repo.go
+// 保留此文件仅用于向后兼容
+
 import (
 	"encoding/json"
 	"os"

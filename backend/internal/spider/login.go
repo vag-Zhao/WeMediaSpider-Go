@@ -20,12 +20,12 @@ import (
 
 // LoginManager 登录管理器
 type LoginManager struct {
-	token       string
-	cookies     map[string]string
-	cacheFile   string
-	expireHours int
-	keyManager  *crypto.KeyManager
-	loginTime   int64 // 添加登录时间字段
+	token           string
+	cookies         map[string]string
+	cacheFile       string
+	expireHours     int
+	securityManager *crypto.SecurityManager
+	loginTime       int64 // 添加登录时间字段
 }
 
 // NewLoginManager 创建登录管理器
@@ -34,15 +34,15 @@ func NewLoginManager() *LoginManager {
 	cacheDir := filepath.Join(homeDir, ".wemediaspider")
 	os.MkdirAll(cacheDir, 0755)
 
-	keyManager, err := crypto.NewKeyManager()
+	securityManager, err := crypto.NewSecurityManager(cacheDir)
 	if err != nil {
-		logger.Errorf("Failed to create key manager: %v", err)
+		logger.Errorf("Failed to create security manager: %v", err)
 	}
 
 	lm := &LoginManager{
-		cacheFile:   filepath.Join(cacheDir, "login_cache.json"),
-		expireHours: 96, // 4 days
-		keyManager:  keyManager,
+		cacheFile:       filepath.Join(cacheDir, "login_cache.json"),
+		expireHours:     96, // 4 days
+		securityManager: securityManager,
 	}
 
 	// 尝试加载缓存
@@ -281,7 +281,7 @@ func indexOfChar(s string, c rune) int {
 	return -1
 }
 
-// saveCache 保存缓存
+// saveCache 保存缓存（加密存储 + HMAC）
 func (lm *LoginManager) saveCache() error {
 	// 如果没有设置登录时间，使用当前时间
 	timestamp := lm.loginTime
@@ -295,29 +295,114 @@ func (lm *LoginManager) saveCache() error {
 		Timestamp: timestamp,
 	}
 
-	data, err := json.MarshalIndent(cache, "", "  ")
+	// 序列化为 JSON
+	data, err := json.Marshal(cache)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal cache: %w", err)
 	}
 
-	return os.WriteFile(lm.cacheFile, data, 0644)
+	// 使用 SecurityManager 安全写入（加密 + HMAC + 0600权限）
+	if lm.securityManager == nil {
+		return fmt.Errorf("security manager not initialized")
+	}
+
+	if err := lm.securityManager.SecureWriteFile(lm.cacheFile, data); err != nil {
+		return fmt.Errorf("failed to save cache: %w", err)
+	}
+
+	logger.Info("登录缓存已加密保存（含完整性校验）")
+	return nil
 }
 
-// loadCache 加载缓存
+// loadCache 加载缓存（解密 + HMAC验证）
 func (lm *LoginManager) loadCache() error {
-	data, err := os.ReadFile(lm.cacheFile)
+	// 读取文件
+	fileData, err := os.ReadFile(lm.cacheFile)
 	if err != nil {
 		return err
 	}
 
+	// 检查是否是旧的明文格式（向后兼容）
 	var cache models.LoginCache
-	if err := json.Unmarshal(data, &cache); err != nil {
-		return err
+	if err := json.Unmarshal(fileData, &cache); err == nil {
+		// 是旧的明文格式，加载后重新加密保存
+		logger.Warn("检测到明文登录缓存，正在转换为加密格式...")
+		lm.token = cache.Token
+		lm.cookies = cache.Cookies
+		lm.loginTime = cache.Timestamp
+
+		// 重新加密保存
+		if saveErr := lm.saveCache(); saveErr != nil {
+			logger.Errorf("转换加密格式失败: %v", saveErr)
+		} else {
+			logger.Info("已成功转换为加密格式（含完整性校验）")
+		}
+
+		// 检查是否过期
+		elapsed := time.Since(time.Unix(cache.Timestamp, 0))
+		if elapsed.Hours() > float64(lm.expireHours) {
+			return errors.ErrTokenExpired
+		}
+
+		return nil
+	}
+
+	// 尝试使用 SecurityManager 解密（新格式，含HMAC）
+	if lm.securityManager == nil {
+		return fmt.Errorf("security manager not initialized")
+	}
+
+	decryptedData, err := lm.securityManager.SecureReadFile(lm.cacheFile)
+	if err != nil {
+		// 如果 HMAC 验证失败，可能是旧的加密格式（无HMAC）
+		// 尝试直接解密
+		logger.Warn("HMAC验证失败，尝试旧加密格式...")
+
+		masterKey, keyErr := lm.securityManager.GetKeyManager().GetMasterKey()
+		if keyErr != nil {
+			return fmt.Errorf("failed to get master key: %w", keyErr)
+		}
+
+		// 尝试直接解密（旧格式，无HMAC）
+		decryptedData, err = crypto.DecryptFromZGSWX(fileData, masterKey)
+		if err != nil {
+			return fmt.Errorf("failed to decrypt cache: %w", err)
+		}
+
+		// 成功解密旧格式，重新保存为新格式（含HMAC）
+		logger.Info("检测到旧加密格式，正在升级...")
+		if err := json.Unmarshal(decryptedData, &cache); err != nil {
+			return fmt.Errorf("failed to unmarshal cache: %w", err)
+		}
+
+		lm.token = cache.Token
+		lm.cookies = cache.Cookies
+		lm.loginTime = cache.Timestamp
+
+		// 重新保存为新格式
+		if saveErr := lm.saveCache(); saveErr != nil {
+			logger.Errorf("升级加密格式失败: %v", saveErr)
+		} else {
+			logger.Info("已成功升级为新加密格式（含完整性校验）")
+		}
+
+		// 检查是否过期
+		elapsed := time.Since(time.Unix(cache.Timestamp, 0))
+		if elapsed.Hours() > float64(lm.expireHours) {
+			return errors.ErrTokenExpired
+		}
+
+		return nil
+	}
+
+	// 解析 JSON
+	if err := json.Unmarshal(decryptedData, &cache); err != nil {
+		return fmt.Errorf("failed to unmarshal cache: %w", err)
 	}
 
 	lm.token = cache.Token
 	lm.cookies = cache.Cookies
-	lm.loginTime = cache.Timestamp // 加载登录时间
+	lm.loginTime = cache.Timestamp
 
 	// 检查是否过期
 	elapsed := time.Since(time.Unix(cache.Timestamp, 0))
@@ -355,19 +440,15 @@ func (lm *LoginManager) GetStatus() models.LoginStatus {
 		}
 	}
 
-	// 读取缓存时间
-	data, err := os.ReadFile(lm.cacheFile)
-	if err != nil {
+	// 尝试加载缓存获取时间信息
+	if err := lm.loadCache(); err != nil {
 		return models.LoginStatus{
 			IsLoggedIn: false,
-			Message:    "缓存文件不存在",
+			Message:    "缓存文件不存在或已损坏",
 		}
 	}
 
-	var cache models.LoginCache
-	json.Unmarshal(data, &cache)
-
-	loginTime := time.Unix(cache.Timestamp, 0)
+	loginTime := time.Unix(lm.loginTime, 0)
 	expireTime := loginTime.Add(time.Duration(lm.expireHours) * time.Hour)
 	hoursSince := time.Since(loginTime).Hours()
 	hoursUntil := time.Until(expireTime).Hours()
@@ -415,7 +496,7 @@ func (lm *LoginManager) GetHeaders() map[string]string {
 	return headers
 }
 
-// ExportCredentials 导出加密的登录凭证（自动加密）
+// ExportCredentials 导出加密的登录凭证（自动加密 + HMAC）
 func (lm *LoginManager) ExportCredentials() ([]byte, error) {
 	if lm.token == "" || len(lm.cookies) == 0 {
 		return nil, fmt.Errorf("未登录，无法导出凭证")
@@ -435,7 +516,7 @@ func (lm *LoginManager) ExportCredentials() ([]byte, error) {
 	}
 
 	// 获取主密钥
-	masterKey, err := lm.keyManager.GetMasterKey()
+	masterKey, err := lm.securityManager.GetKeyManager().GetMasterKey()
 	if err != nil {
 		return nil, fmt.Errorf("获取密钥失败: %w", err)
 	}
@@ -446,18 +527,46 @@ func (lm *LoginManager) ExportCredentials() ([]byte, error) {
 		return nil, fmt.Errorf("加密凭证失败: %w", err)
 	}
 
-	return encrypted, nil
+	// 计算 HMAC
+	hmacValue, err := lm.securityManager.ComputeHMAC(encrypted)
+	if err != nil {
+		return nil, fmt.Errorf("计算完整性校验失败: %w", err)
+	}
+
+	// 附加 HMAC
+	result := append(encrypted, []byte(hmacValue)...)
+
+	return result, nil
 }
 
-// ImportCredentials 导入加密的登录凭证（自动解密）
-func (lm *LoginManager) ImportCredentials(encryptedData []byte) error {
+// ImportCredentials 导入加密的登录凭证（自动解密 + HMAC验证）
+func (lm *LoginManager) ImportCredentials(encryptedDataWithHMAC []byte) error {
+	// 检查长度（至少要有 HMAC）
+	if len(encryptedDataWithHMAC) < 64 {
+		return fmt.Errorf("无效的凭证文件：文件过小")
+	}
+
+	// 分离加密数据和 HMAC
+	encryptedData := encryptedDataWithHMAC[:len(encryptedDataWithHMAC)-64]
+	expectedHMAC := string(encryptedDataWithHMAC[len(encryptedDataWithHMAC)-64:])
+
+	// 验证 HMAC
+	valid, err := lm.securityManager.VerifyHMAC(encryptedData, expectedHMAC)
+	if err != nil {
+		// 如果 HMAC 验证失败，可能是旧格式（无HMAC）
+		logger.Warn("HMAC验证失败，尝试旧格式导入...")
+		encryptedData = encryptedDataWithHMAC // 使用完整数据
+	} else if !valid {
+		return fmt.Errorf("完整性校验失败：凭证文件可能已被篡改")
+	}
+
 	// 验证文件格式
 	if err := crypto.ValidateZGSWXFormat(encryptedData); err != nil {
 		return fmt.Errorf("无效的凭证文件格式: %w", err)
 	}
 
 	// 获取主密钥
-	masterKey, err := lm.keyManager.GetMasterKey()
+	masterKey, err := lm.securityManager.GetKeyManager().GetMasterKey()
 	if err != nil {
 		return fmt.Errorf("获取密钥失败: %w", err)
 	}

@@ -46,6 +46,10 @@ export function ExportCredentials() {
   return window['go']['app']['App']['ExportCredentials']();
 }
 
+export function ExportToJSON(arg1) {
+  return window['go']['app']['App']['ExportToJSON'](arg1);
+}
+
 export function ExtractArticleImages(arg1) {
   return window['go']['app']['App']['ExtractArticleImages'](arg1);
 }
@@ -96,6 +100,10 @@ export function HideToTray() {
 
 export function ImportCredentials() {
   return window['go']['app']['App']['ImportCredentials']();
+}
+
+export function ImportJSONFile(arg1) {
+  return window['go']['app']['App']['ImportJSONFile'](arg1);
 }
 
 export function IsAutostartEnabled() {

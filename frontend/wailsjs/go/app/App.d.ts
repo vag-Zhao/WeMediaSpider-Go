@@ -29,6 +29,8 @@ export function ExportArticles(arg1:Array<models.Article>,arg2:string,arg3:strin
 
 export function ExportCredentials():Promise<string>;
 
+export function ExportToJSON(arg1:string):Promise<string>;
+
 export function ExtractArticleImages(arg1:string):Promise<Array<spider.ImageInfo>>;
 
 export function ForceQuit():Promise<void>;
@@ -54,6 +56,8 @@ export function GetUpdateIgnoredDate():Promise<string>;
 export function HideToTray():Promise<void>;
 
 export function ImportCredentials():Promise<void>;
+
+export function ImportJSONFile(arg1:string):Promise<void>;
 
 export function IsAutostartEnabled():Promise<boolean>;
 

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -14,8 +15,11 @@ import (
 	"WeMediaSpider/backend/internal/autostart"
 	"WeMediaSpider/backend/internal/cache"
 	"WeMediaSpider/backend/internal/config"
+	"WeMediaSpider/backend/internal/database"
+	dbmodels "WeMediaSpider/backend/internal/database/models"
 	"WeMediaSpider/backend/internal/export"
 	"WeMediaSpider/backend/internal/models"
+	"WeMediaSpider/backend/internal/repository"
 	"WeMediaSpider/backend/internal/spider"
 	"WeMediaSpider/backend/internal/storage"
 	"WeMediaSpider/backend/internal/tray"
@@ -33,8 +37,10 @@ type App struct {
 	systemConfigManager *config.SystemConfigManager
 	cacheManager        *cache.Manager
 	imageDownloader     *spider.ImageDownloader
-	dataManager         *config.DataManager
-	storageManager      *storage.Manager
+	db                  *database.Database
+	articleRepo         repository.ArticleRepository
+	accountRepo         repository.AccountRepository
+	statsRepo           repository.StatsRepository
 	trayManager         *tray.Manager
 	autostartManager    *autostart.Manager
 	closeToTray         bool   // 关闭到托盘
@@ -85,13 +91,43 @@ func NewApp() *App {
 		logger.Warnf("[NewApp] systemConfigManager is nil")
 	}
 
+	// 初始化数据库
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		logger.Errorf("Failed to get home directory: %v", err)
+		homeDir = "."
+	}
+	configDir := filepath.Join(homeDir, ".wemediaspider")
+
+	db, err := database.NewDatabase(configDir)
+	if err != nil {
+		logger.Errorf("Failed to initialize database: %v", err)
+	} else {
+		// 自动迁移表结构
+		if err := db.AutoMigrate(); err != nil {
+			logger.Errorf("Failed to migrate database: %v", err)
+		}
+	}
+
+	// 初始化仓储
+	var articleRepo repository.ArticleRepository
+	var accountRepo repository.AccountRepository
+	var statsRepo repository.StatsRepository
+	if db != nil {
+		articleRepo = repository.NewArticleRepository(db.DB)
+		accountRepo = repository.NewAccountRepository(db.DB)
+		statsRepo = repository.NewStatsRepository(db.DB)
+	}
+
 	app := &App{
 		loginManager:        spider.NewLoginManager(),
 		configManager:       config.NewManager(),
 		systemConfigManager: systemConfigManager,
 		cacheManager:        cacheManager,
-		dataManager:         config.NewDataManager(),
-		storageManager:      storage.NewManager(),
+		db:                  db,
+		articleRepo:         articleRepo,
+		accountRepo:         accountRepo,
+		statsRepo:           statsRepo,
 		trayManager:         tray.NewManager(),
 		autostartManager:    autostartManager,
 		closeToTray:         systemConfig.CloseToTray,
@@ -153,6 +189,9 @@ func (a *App) Startup(ctx context.Context) {
 func (a *App) Shutdown(ctx context.Context) {
 	if a.cacheManager != nil {
 		a.cacheManager.Close()
+	}
+	if a.db != nil {
+		a.db.Close()
 	}
 	logger.Info("Application shutdown")
 }
@@ -464,26 +503,54 @@ func (a *App) StartScrape(config models.ScrapeConfig) ([]models.Article, error) 
 	close(statusChan)
 
 	// 发送完成事件
-	if err == nil {
-		// 自动保存数据到配置目录
-		savedPath, saveErr := a.storageManager.AutoSave(articles)
-		if saveErr != nil {
-			logger.Errorf("自动保存数据失败: %v", saveErr)
-		} else {
-			logger.Infof("数据已自动保存: %s", savedPath)
+	if err == nil && len(articles) > 0 {
+		// 保存到数据库
+		if a.db != nil && a.articleRepo != nil {
+			logger.Info("保存文章到数据库...")
+			dbArticles := make([]*dbmodels.Article, 0, len(articles))
+
+			for i := range articles {
+				article := &articles[i]
+				// 查找或创建公众号
+				account, accErr := a.accountRepo.FindOrCreate(article.AccountFakeid, article.AccountName)
+				if accErr != nil {
+					logger.Errorf("Failed to find or create account: %v", accErr)
+					continue
+				}
+
+				dbArticle := database.ConvertToDBArticle(article, account.ID)
+				dbArticles = append(dbArticles, dbArticle)
+			}
+
+			// 批量保存到数据库
+			if len(dbArticles) > 0 {
+				if saveErr := a.articleRepo.BatchCreate(dbArticles); saveErr != nil {
+					logger.Errorf("Failed to save articles to database: %v", saveErr)
+				} else {
+					logger.Infof("Successfully saved %d articles to database", len(dbArticles))
+				}
+			}
+
+			// 更新统计信息
+			totalArticles, _ := a.articleRepo.Count()
+			accounts, _ := a.accountRepo.List()
+			todayArticles := database.CalculateTodayArticles(articles)
+			lastScrapeTime := articles[0].PublishTime
+
+			if statsErr := a.statsRepo.UpdateArticleStats(
+				int(totalArticles),
+				len(accounts),
+				todayArticles,
+				lastScrapeTime,
+			); statsErr != nil {
+				logger.Errorf("Failed to update stats: %v", statsErr)
+			}
 		}
 
 		runtime.EventsEmit(a.ctx, "scrape:completed", map[string]interface{}{
-			"total":     len(articles),
-			"savedPath": savedPath,
+			"total": len(articles),
 		})
-		// 保存应用数据
-		if len(articles) > 0 {
-			if err := a.dataManager.UpdateArticleStats(articles); err != nil {
-				logger.Errorf("Failed to update app data: %v", err)
-			}
-		}
-	} else {
+	} else if err != nil {
 		// 检查是否是取消操作导致的错误
 		errMsg := err.Error()
 		if errMsg != "context canceled" && !strings.Contains(errMsg, "canceled") {
@@ -557,8 +624,10 @@ func (a *App) ExportArticles(articles []models.Article, format string, filename 
 	} else {
 		logger.Infof("Export completed successfully")
 		// 保存导出统计
-		if err := a.dataManager.IncrementExports(); err != nil {
-			logger.Errorf("Failed to update export stats: %v", err)
+		if a.statsRepo != nil {
+			if err := a.statsRepo.IncrementExports(); err != nil {
+				logger.Errorf("Failed to update export stats: %v", err)
+			}
 		}
 	}
 	return err
@@ -878,12 +947,35 @@ func compareVersions(v1, v2 string) int {
 
 // GetAppData 获取应用数据
 func (a *App) GetAppData() (models.AppData, error) {
-	return a.dataManager.LoadData()
+	// 从数据库获取
+	if a.db == nil || a.statsRepo == nil {
+		return models.AppData{}, fmt.Errorf("database not initialized")
+	}
+
+	stats, err := a.statsRepo.Get()
+	if err != nil {
+		return models.AppData{}, fmt.Errorf("failed to get stats from database: %w", err)
+	}
+
+	// 获取公众号列表
+	accounts, err := a.accountRepo.List()
+	if err != nil {
+		logger.Warnf("Failed to list accounts: %v", err)
+		accounts = []*dbmodels.Account{}
+	}
+
+	accountNames := make([]string, len(accounts))
+	for i, acc := range accounts {
+		accountNames[i] = acc.Name
+	}
+
+	return database.ConvertToAppData(stats, accountNames), nil
 }
 
-// UpdateAppData 更新应用数据
+// UpdateAppData 更新应用数据（已废弃，保留用于兼容）
 func (a *App) UpdateAppData(articles []models.Article) error {
-	return a.dataManager.UpdateArticleStats(articles)
+	logger.Warn("UpdateAppData is deprecated, stats are updated automatically")
+	return nil
 }
 
 // ============================================================
@@ -920,8 +1012,10 @@ func (a *App) BatchDownloadImages(images []spider.ImageInfo, baseDir string, max
 			"total": len(images),
 		})
 		// 保存图片下载统计
-		if err := a.dataManager.IncrementImages(len(images)); err != nil {
-			logger.Errorf("Failed to update image stats: %v", err)
+		if a.statsRepo != nil {
+			if err := a.statsRepo.IncrementImages(len(images)); err != nil {
+				logger.Errorf("Failed to update image stats: %v", err)
+			}
 		}
 	} else {
 		// 检查是否是取消操作导致的错误
@@ -947,33 +1041,145 @@ func (a *App) CancelImageDownload() {
 // 数据管理相关
 // ============================================================
 
-// ListDataFiles 列出所有保存的数据文件
+// ListDataFiles 列出所有保存的数据文件（按公众号分组）
 func (a *App) ListDataFiles() ([]storage.DataFileInfo, error) {
-	return a.storageManager.ListDataFiles()
+	// 从数据库获取
+	if a.db == nil || a.articleRepo == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	articles, err := a.articleRepo.GetAllArticles()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get articles from database: %w", err)
+	}
+
+	// 按公众号分组
+	accountGroups := make(map[string][]models.Article)
+	for _, dbArt := range articles {
+		art := database.ConvertToAppArticle(dbArt)
+		accountGroups[art.AccountFakeid] = append(accountGroups[art.AccountFakeid], art)
+	}
+
+	// 构建 DataFileInfo 列表
+	var dataFiles []storage.DataFileInfo
+	for fakeid, arts := range accountGroups {
+		if len(arts) == 0 {
+			continue
+		}
+
+		// 获取公众号名称（使用第一篇文章的公众号名）
+		accountName := arts[0].AccountName
+
+		// 获取最早和最晚的发布时间
+		var earliestTime, latestTime int64
+		for i, art := range arts {
+			if i == 0 {
+				earliestTime = art.PublishTimestamp
+				latestTime = art.PublishTimestamp
+			} else {
+				if art.PublishTimestamp < earliestTime {
+					earliestTime = art.PublishTimestamp
+				}
+				if art.PublishTimestamp > latestTime {
+					latestTime = art.PublishTimestamp
+				}
+			}
+		}
+
+		// 格式化时间范围
+		earliestDate := time.Unix(earliestTime, 0).Format("2006-01-02")
+		latestDate := time.Unix(latestTime, 0).Format("2006-01-02")
+		timeRange := earliestDate
+		if earliestDate != latestDate {
+			timeRange = fmt.Sprintf("%s ~ %s", earliestDate, latestDate)
+		}
+
+		dataFiles = append(dataFiles, storage.DataFileInfo{
+			Filename:   fmt.Sprintf("%s.db", accountName),
+			FilePath:   fakeid, // 使用 fakeid 作为标识
+			SaveTime:   timeRange,
+			TotalCount: len(arts),
+			Accounts:   []string{accountName},
+			FileSize:   0, // 数据库模式下不计算文件大小
+		})
+	}
+
+	// 按文章数量倒序排序
+	sort.Slice(dataFiles, func(i, j int) bool {
+		return dataFiles[i].TotalCount > dataFiles[j].TotalCount
+	})
+
+	return dataFiles, nil
 }
 
-// LoadDataFile 加载指定的数据文件
-func (a *App) LoadDataFile(filepath string) ([]models.Article, error) {
-	return a.storageManager.LoadData(filepath)
+// LoadDataFile 加载指定公众号的文章
+func (a *App) LoadDataFile(fakeidOrPath string) ([]models.Article, error) {
+	// 从数据库加载
+	if a.db == nil || a.articleRepo == nil {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	// 使用 fakeid 查询文章
+	dbArticles, err := a.articleRepo.FindByAccountFakeid(fakeidOrPath, 0, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load articles from database: %w", err)
+	}
+
+	return database.ConvertToAppArticles(dbArticles), nil
 }
 
-// DeleteDataFile 删除指定的数据文件
-func (a *App) DeleteDataFile(filepath string) error {
-	return a.storageManager.DeleteData(filepath)
+// DeleteDataFile 删除指定公众号的所有文章
+func (a *App) DeleteDataFile(fakeidOrPath string) error {
+	// 从数据库删除
+	if a.db == nil || a.articleRepo == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	// 查询该公众号的所有文章
+	dbArticles, err := a.articleRepo.FindByAccountFakeid(fakeidOrPath, 0, 0)
+	if err != nil {
+		return fmt.Errorf("failed to find articles: %w", err)
+	}
+
+	// 删除所有文章
+	for _, article := range dbArticles {
+		if err := a.articleRepo.Delete(article.ArticleID); err != nil {
+			logger.Warnf("Failed to delete article %s: %v", article.ArticleID, err)
+		}
+	}
+
+	logger.Infof("Deleted %d articles for account %s", len(dbArticles), fakeidOrPath)
+
+	// 更新统计信息
+	totalArticles, _ := a.articleRepo.Count()
+	accounts, _ := a.accountRepo.List()
+	if err := a.statsRepo.UpdateArticleStats(int(totalArticles), len(accounts), 0, ""); err != nil {
+		logger.Warnf("Failed to update stats: %v", err)
+	}
+
+	return nil
 }
 
 // GetDataDirectory 获取数据目录路径
 func (a *App) GetDataDirectory() string {
-	return a.storageManager.GetDataDir()
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	return filepath.Join(homeDir, ".wemediaspider")
 }
 
-// OpenDataFileDialog 打开数据文件选择对话框（自动定位到数据目录）
+// OpenDataFileDialog 打开数据文件选择对话框（用于导入 JSON 文件）
 func (a *App) OpenDataFileDialog() (string, error) {
-	dataDir := a.storageManager.GetDataDir()
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = "."
+	}
+	dataDir := filepath.Join(homeDir, ".wemediaspider", "data")
 
 	filepath, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title:                "选择数据文件",
-		DefaultDirectory:     dataDir,
+		Title:            "选择 JSON 数据文件导入",
+		DefaultDirectory: dataDir,
 		Filters: []runtime.FileFilter{
 			{
 				DisplayName: "JSON 数据文件 (*.json)",
@@ -987,4 +1193,140 @@ func (a *App) OpenDataFileDialog() (string, error) {
 	}
 
 	return filepath, nil
+}
+
+// ImportJSONFile 导入 JSON 文件到数据库
+func (a *App) ImportJSONFile(filePath string) error {
+	if a.db == nil || a.articleRepo == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	// 读取 JSON 文件
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+
+	// 解析 JSON
+	var savedData struct {
+		Articles   []models.Article `json:"articles"`
+		SaveTime   string           `json:"saveTime"`
+		TotalCount int              `json:"totalCount"`
+		Accounts   []string         `json:"accounts"`
+	}
+
+	if err := json.Unmarshal(data, &savedData); err != nil {
+		return fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	logger.Infof("Importing %d articles from %s", len(savedData.Articles), filePath)
+
+	// 转换并保存到数据库
+	dbArticles := make([]*dbmodels.Article, 0, len(savedData.Articles))
+	for i := range savedData.Articles {
+		article := &savedData.Articles[i]
+
+		// 查找或创建公众号
+		account, err := a.accountRepo.FindOrCreate(article.AccountFakeid, article.AccountName)
+		if err != nil {
+			logger.Warnf("Failed to find or create account: %v", err)
+			continue
+		}
+
+		dbArticle := database.ConvertToDBArticle(article, account.ID)
+		dbArticles = append(dbArticles, dbArticle)
+	}
+
+	// 批量保存
+	if len(dbArticles) > 0 {
+		if err := a.articleRepo.BatchCreate(dbArticles); err != nil {
+			return fmt.Errorf("failed to save articles: %w", err)
+		}
+		logger.Infof("Successfully imported %d articles", len(dbArticles))
+	}
+
+	// 更新统计信息
+	totalArticles, _ := a.articleRepo.Count()
+	accounts, _ := a.accountRepo.List()
+	todayArticles := database.CalculateTodayArticles(savedData.Articles)
+	lastScrapeTime := time.Now().Format("2006-01-02 15:04:05")
+
+	if err := a.statsRepo.UpdateArticleStats(
+		int(totalArticles),
+		len(accounts),
+		todayArticles,
+		lastScrapeTime,
+	); err != nil {
+		logger.Warnf("Failed to update stats: %v", err)
+	}
+
+	return nil
+}
+
+// ExportToJSON 导出数据库数据到 JSON 文件
+func (a *App) ExportToJSON(dateOrPath string) (string, error) {
+	if a.db == nil || a.articleRepo == nil {
+		return "", fmt.Errorf("database not initialized")
+	}
+
+	// 解析日期
+	date, err := time.Parse("2006-01-02", dateOrPath)
+	if err != nil {
+		return "", fmt.Errorf("invalid date format: %w", err)
+	}
+
+	// 查询该日期的文章
+	startDate := date
+	endDate := date.Add(24 * time.Hour)
+	dbArticles, err := a.articleRepo.FindByDateRange(startDate, endDate, 0, 0)
+	if err != nil {
+		return "", fmt.Errorf("failed to load articles: %w", err)
+	}
+
+	articles := database.ConvertToAppArticles(dbArticles)
+
+	// 构建保存数据
+	accounts := database.ExtractAccountNames(articles)
+	savedData := struct {
+		Articles   []models.Article `json:"articles"`
+		SaveTime   string           `json:"saveTime"`
+		TotalCount int              `json:"totalCount"`
+		Accounts   []string         `json:"accounts"`
+	}{
+		Articles:   articles,
+		SaveTime:   time.Now().Format("2006-01-02 15:04:05"),
+		TotalCount: len(articles),
+		Accounts:   accounts,
+	}
+
+	// 序列化为 JSON
+	jsonData, err := json.MarshalIndent(savedData, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal JSON: %w", err)
+	}
+
+	// 打开保存对话框
+	filename := fmt.Sprintf("export_%s.json", dateOrPath)
+	savePath, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:           "导出为 JSON 文件",
+		DefaultFilename: filename,
+		Filters: []runtime.FileFilter{
+			{
+				DisplayName: "JSON 文件 (*.json)",
+				Pattern:     "*.json",
+			},
+		},
+	})
+
+	if err != nil || savePath == "" {
+		return "", fmt.Errorf("用户取消操作")
+	}
+
+	// 写入文件
+	if err := os.WriteFile(savePath, jsonData, 0644); err != nil {
+		return "", fmt.Errorf("failed to write file: %w", err)
+	}
+
+	logger.Infof("Exported %d articles to %s", len(articles), savePath)
+	return savePath, nil
 }

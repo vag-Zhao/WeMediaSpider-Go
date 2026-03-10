@@ -1,5 +1,8 @@
 package storage
 
+// Deprecated: 此模块已废弃，请使用 backend/internal/database 和 backend/internal/repository 模块
+// 保留此文件仅用于数据迁移和向后兼容
+
 import (
 	"encoding/json"
 	"fmt"
