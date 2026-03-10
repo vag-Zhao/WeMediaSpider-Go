@@ -24,3 +24,14 @@ body {
     height: 100vh;
     text-align: center;
 }
+
+/* 隐藏数值输入框的增减按钮 */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+input[type="number"] {
+    -moz-appearance: textfield;
+}
