@@ -3,7 +3,6 @@
 import {spider} from '../models';
 import {app} from '../models';
 import {models} from '../models';
-import {storage} from '../models';
 import {frontend} from '../models';
 import {context} from '../models';
 
@@ -89,7 +88,7 @@ export function IsAutostartEnabled():Promise<boolean>;
 
 export function IsAutostartSilent():Promise<boolean>;
 
-export function ListDataFiles():Promise<Array<storage.DataFileInfo>>;
+export function ListDataFiles():Promise<Array<models.DataFileInfo>>;
 
 export function ListScheduledTasks(arg1:boolean):Promise<Array<models.ScheduledTask>>;
 

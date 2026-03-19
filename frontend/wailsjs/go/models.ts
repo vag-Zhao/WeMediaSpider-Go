@@ -317,6 +317,28 @@ export namespace models {
 	        this.error = source["error"];
 	    }
 	}
+	export class DataFileInfo {
+	    filename: string;
+	    filePath: string;
+	    saveTime: string;
+	    totalCount: number;
+	    accounts: string[];
+	    fileSize: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new DataFileInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.filename = source["filename"];
+	        this.filePath = source["filePath"];
+	        this.saveTime = source["saveTime"];
+	        this.totalCount = source["totalCount"];
+	        this.accounts = source["accounts"];
+	        this.fileSize = source["fileSize"];
+	    }
+	}
 	
 	
 	export class LoginStatus {
@@ -529,33 +551,6 @@ export namespace spider {
 	        this.filename = source["filename"];
 	        this.articleTitle = source["articleTitle"];
 	        this.accountName = source["accountName"];
-	    }
-	}
-
-}
-
-export namespace storage {
-	
-	export class DataFileInfo {
-	    filename: string;
-	    filepath: string;
-	    saveTime: string;
-	    totalCount: number;
-	    accounts: string[];
-	    fileSize: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new DataFileInfo(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.filename = source["filename"];
-	        this.filepath = source["filepath"];
-	        this.saveTime = source["saveTime"];
-	        this.totalCount = source["totalCount"];
-	        this.accounts = source["accounts"];
-	        this.fileSize = source["fileSize"];
 	    }
 	}
 
