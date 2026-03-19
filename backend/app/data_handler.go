@@ -10,7 +10,6 @@ import (
 	"WeMediaSpider/backend/internal/database"
 	dbmodels "WeMediaSpider/backend/internal/database/models"
 	"WeMediaSpider/backend/internal/models"
-	"WeMediaSpider/backend/internal/storage"
 	"WeMediaSpider/backend/pkg/logger"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -52,7 +51,7 @@ func (a *App) UpdateAppData(articles []models.Article) error {
 // 图片下载相关
 // ============================================================
 
-func (a *App) ListDataFiles() ([]storage.DataFileInfo, error) {
+func (a *App) ListDataFiles() ([]models.DataFileInfo, error) {
 	// 从数据库获取
 	if a.db == nil || a.articleRepo == nil {
 		return nil, fmt.Errorf("database not initialized")
@@ -71,7 +70,7 @@ func (a *App) ListDataFiles() ([]storage.DataFileInfo, error) {
 	}
 
 	// 构建 DataFileInfo 列表
-	var dataFiles []storage.DataFileInfo
+	var dataFiles []models.DataFileInfo
 	for fakeid, arts := range accountGroups {
 		if len(arts) == 0 {
 			continue
@@ -104,7 +103,7 @@ func (a *App) ListDataFiles() ([]storage.DataFileInfo, error) {
 			timeRange = fmt.Sprintf("%s ~ %s", earliestDate, latestDate)
 		}
 
-		dataFiles = append(dataFiles, storage.DataFileInfo{
+		dataFiles = append(dataFiles, models.DataFileInfo{
 			Filename:   fmt.Sprintf("%s.db", accountName),
 			FilePath:   fakeid, // 使用 fakeid 作为标识
 			SaveTime:   timeRange,

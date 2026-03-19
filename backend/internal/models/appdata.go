@@ -1,5 +1,15 @@
 package models
 
+// DataFileInfo 数据文件信息（原 storage.DataFileInfo）
+type DataFileInfo struct {
+	Filename   string   `json:"filename"`
+	FilePath   string   `json:"filePath"`
+	SaveTime   string   `json:"saveTime"`
+	TotalCount int      `json:"totalCount"`
+	Accounts   []string `json:"accounts"`
+	FileSize   int64    `json:"fileSize"`
+}
+
 // AppData 应用数据
 type AppData struct {
 	TotalArticles   int      `json:"totalArticles"`
