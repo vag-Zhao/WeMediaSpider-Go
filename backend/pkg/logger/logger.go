@@ -1,7 +1,6 @@
 package logger
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -28,8 +27,8 @@ func Init() error {
 	// 初始化日志缓冲区（保留最近 1000 条）
 	InitBuffer(1000)
 
-	// 添加 Hook 将日志写入缓冲区
-	Log.AddHook(&BufferHook{})
+	// TODO: 将在 Task 3 中替换
+	// Log.AddHook(&BufferHook{})
 
 	// 创建日志目录
 	homeDir, _ := os.UserHomeDir()
@@ -50,24 +49,25 @@ func Init() error {
 	return nil
 }
 
+// TODO: 将在 Task 3 中替换
 // BufferHook 日志缓冲区 Hook
-type BufferHook struct{}
-
-func (h *BufferHook) Levels() []logrus.Level {
-	return logrus.AllLevels
-}
-
-func (h *BufferHook) Fire(entry *logrus.Entry) error {
-	if buffer != nil {
-		logLine := fmt.Sprintf("[%s] %s: %s",
-			entry.Time.Format("2006-01-02 15:04:05"),
-			entry.Level.String(),
-			entry.Message,
-		)
-		buffer.AddLog(logLine)
-	}
-	return nil
-}
+// type BufferHook struct{}
+//
+// func (h *BufferHook) Levels() []logrus.Level {
+// 	return logrus.AllLevels
+// }
+//
+// func (h *BufferHook) Fire(entry *logrus.Entry) error {
+// 	if buffer != nil {
+// 		logLine := fmt.Sprintf("[%s] %s: %s",
+// 			entry.Time.Format("2006-01-02 15:04:05"),
+// 			entry.Level.String(),
+// 			entry.Message,
+// 		)
+// 		buffer.AddLog(logLine)
+// 	}
+// 	return nil
+// }
 
 // Info 记录信息日志
 func Info(args ...interface{}) {
