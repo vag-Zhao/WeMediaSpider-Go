@@ -53,6 +53,7 @@ const WordCloudChart = forwardRef<WordCloudRef, WordCloudChartProps>((
     chartInstance.current = echarts.init(container)
 
     const colors = COLOR_SCHEMES[colorScheme]
+
     const wordCloudData = data.map(item => ({ name: item.word, value: item.count }))
 
     const option = {
@@ -66,33 +67,26 @@ const WordCloudChart = forwardRef<WordCloudRef, WordCloudChartProps>((
       },
       series: [{
         type: 'wordCloud',
-        // 明确铺满整个画布
         left: 0,
         top: 0,
         width: '100%',
         height: '100%',
         shape: 'circle',
         sizeRange,
-        // 以水平为主，少量倾斜，更易读
-        rotationRange: [-30, 30],
-        rotationStep: 30,
-        // 减小间距，词云更紧凑生动
-        gridSize: 6,
+        rotationRange: [-45, 45],
+        rotationStep: 45,
+        gridSize: 8,
         drawOutOfBound: false,
         layoutAnimation: true,
-        // 根据权重调整字体粗细
         textStyle: {
-          fontFamily: '"Microsoft YaHei", "PingFang SC", sans-serif',
-          fontWeight: (params: any) => {
-            const max = wordCloudData[0]?.value || 1
-            return params.data.value / max > 0.5 ? 'bold' : 'normal'
-          },
+          fontFamily: 'sans-serif',
+          fontWeight: 'bold',
           color: () => colors[Math.floor(Math.random() * colors.length)],
         },
         emphasis: {
           focus: 'self',
           textStyle: {
-            textShadowBlur: 12,
+            textShadowBlur: 10,
             textShadowColor: colors[0],
           },
         },

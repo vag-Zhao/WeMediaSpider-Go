@@ -62,7 +62,7 @@ func (ke *KeywordExtractor) ExtractTopKeywords(texts []string, topN int) []Keywo
 
 	numDocs := float64(len(texts))
 	minDocFreq := 2
-	if len(texts) <= 3 {
+	if len(texts) <= 10 {
 		minDocFreq = 1
 	}
 

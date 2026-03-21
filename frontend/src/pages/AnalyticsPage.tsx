@@ -145,14 +145,14 @@ const AnalyticsPage: React.FC = () => {
       flexDirection: 'column',
       height: '100%',
       overflow: 'hidden',
-      padding: '12px 24px'
+      padding: '0px 24px 12px'
     }}>
       {/* 顶部控制栏 */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         gap: 16,
-        marginBottom: 16,
+        marginBottom: 10,
         height: 60
       }}>
         <RangePicker
@@ -246,6 +246,20 @@ const AnalyticsPage: React.FC = () => {
                         { value: 'rainbow', label: '🌈 彩虹' },
                       ]}
                     />
+                    {/* 字号滑块 */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', flexShrink: 0 }}>字号</span>
+                      <Slider
+                        range
+                        min={8}
+                        max={80}
+                        value={sizeRange}
+                        onChange={v => setSizeRange(v as [number, number])}
+                        style={{ width: 120 }}
+                        tooltip={{ formatter: v => `${v}px` }}
+                      />
+                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', flexShrink: 0 }}>{sizeRange[0]}–{sizeRange[1]}px</span>
+                    </div>
                     {/* 导出按钮 */}
                     <Select
                       size="small"
@@ -266,20 +280,6 @@ const AnalyticsPage: React.FC = () => {
               style={{ background: 'rgba(255, 255, 255, 0.05)', flex: 1, overflow: 'hidden' }}
               bodyStyle={{ height: 'calc(100% - 56px)', padding: '8px 16px 16px' }}
             >
-              {/* 字体大小范围 */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', flexShrink: 0 }}>字号</span>
-                <Slider
-                  range
-                  min={8}
-                  max={80}
-                  value={sizeRange}
-                  onChange={v => setSizeRange(v as [number, number])}
-                  style={{ flex: 1 }}
-                  tooltip={{ formatter: v => `${v}px` }}
-                />
-                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', flexShrink: 0 }}>{sizeRange[0]}–{sizeRange[1]}px</span>
-              </div>
               {data?.topKeywords && data.topKeywords.length > 0 ? (
                 <WordCloudChart
                   ref={wordCloudRef}
