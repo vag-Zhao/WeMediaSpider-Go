@@ -71,6 +71,18 @@ func (a *App) Startup(ctx context.Context) {
 		a.cronManager.Start()
 		a.loadScheduledTasks()
 	}
+
+	// 注册任务完成事件回调
+	if a.taskScheduler != nil {
+		a.taskScheduler.SetOnTaskComplete(func(taskID uint, status string, articles int, errMsg string) {
+			runtime.EventsEmit(a.ctx, "task:completed", map[string]interface{}{
+				"taskID":   taskID,
+				"status":   status,
+				"articles": articles,
+				"errMsg":   errMsg,
+			})
+		})
+	}
 }
 
 // Shutdown 应用关闭时调用

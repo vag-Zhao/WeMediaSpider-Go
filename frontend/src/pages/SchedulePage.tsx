@@ -12,8 +12,6 @@ import {
   Tooltip,
   Popconfirm,
   App,
-  Space,
-  Statistic,
   TimePicker,
   Empty,
 } from 'antd'
@@ -26,6 +24,7 @@ import {
   HistoryOutlined,
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
+import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import {
   ListScheduledTasks,
   CreateScheduledTask,
@@ -119,18 +118,18 @@ interface TaskCardProps {
 
 const TaskCard: React.FC<TaskCardProps> = ({ task, onEdit, onDelete, onToggle, onRunNow, onViewLogs }) => {
   const getStatusColor = () => {
-    if (!task.enabled) return 'default'
-    if (task.lastRunStatus === 'running') return 'processing'
-    if (task.lastRunStatus === 'success') return 'success'
-    if (task.lastRunStatus === 'failed') return 'error'
-    return 'default'
+    if (!task.enabled) return '#555'
+    if (task.lastRunStatus === 'running') return '#1677ff'
+    if (task.lastRunStatus === 'success') return '#07C160'
+    if (task.lastRunStatus === 'failed') return '#ff4d4f'
+    return '#faad14'
   }
 
   const getStatusText = () => {
     if (!task.enabled) return '已禁用'
     if (task.lastRunStatus === 'running') return '运行中'
-    if (task.lastRunStatus === 'success') return '成功'
-    if (task.lastRunStatus === 'failed') return '失败'
+    if (task.lastRunStatus === 'success') return '上次成功'
+    if (task.lastRunStatus === 'failed') return '上次失败'
     return '待运行'
   }
 
@@ -141,54 +140,81 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onEdit, onDelete, onToggle, o
     accountCount = cfg.accounts?.length || 0
   } catch { /* ignore */ }
 
+  const accentColor = getStatusColor()
+
   return (
     <Card
-      style={{ background: 'rgba(255, 255, 255, 0.05)', height: 210, display: 'flex', flexDirection: 'column' }}
-      bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 16 }}
+      style={{
+        background: 'rgba(255,255,255,0.04)',
+        borderLeft: `3px solid ${accentColor}`,
+        borderTop: '1px solid rgba(255,255,255,0.08)',
+        borderRight: '1px solid rgba(255,255,255,0.08)',
+        borderBottom: '1px solid rgba(255,255,255,0.08)',
+      }}
+      bodyStyle={{ padding: '10px 14px' }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Tag color={getStatusColor()}>{getStatusText()}</Tag>
-          <span style={{ fontSize: 14, fontWeight: 600 }}>{task.name}</span>
-        </div>
-        <Tooltip title="编辑">
-          <EditOutlined
-            style={{ fontSize: 16, cursor: 'pointer', color: 'rgba(255, 255, 255, 0.65)' }}
-            onClick={() => onEdit(task)}
+      {/* 第一行：名称 + 操作按钮 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <span
+            style={{
+              display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
+              background: accentColor, flexShrink: 0,
+            }}
           />
-        </Tooltip>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.92)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {task.name}
+          </span>
+          <span style={{ fontSize: 11, color: accentColor, flexShrink: 0 }}>{getStatusText()}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 8 }}>
+          <Tooltip title={task.enabled ? '禁用' : '启用'}>
+            <Switch size="small" checked={task.enabled} onChange={() => onToggle(task)} />
+          </Tooltip>
+          <Tooltip title="立即运行">
+            <PlayCircleOutlined
+              style={{ fontSize: 14, cursor: task.enabled ? 'pointer' : 'not-allowed', color: task.enabled ? '#07C160' : 'rgba(255,255,255,0.25)' }}
+              onClick={() => task.enabled && onRunNow(task.ID)}
+            />
+          </Tooltip>
+          <Tooltip title="日志">
+            <HistoryOutlined
+              style={{ fontSize: 14, cursor: 'pointer', color: 'rgba(255,255,255,0.5)' }}
+              onClick={() => onViewLogs(task.ID)}
+            />
+          </Tooltip>
+          <Tooltip title="编辑">
+            <EditOutlined
+              style={{ fontSize: 14, cursor: 'pointer', color: 'rgba(255,255,255,0.5)' }}
+              onClick={() => onEdit(task)}
+            />
+          </Tooltip>
+          <Tooltip title="删除">
+            <Popconfirm title="确认删除此任务？" onConfirm={() => onDelete(task.ID)} okText="删除" cancelText="取消" okType="danger">
+              <DeleteOutlined style={{ fontSize: 14, cursor: 'pointer', color: 'rgba(255,77,79,0.7)' }} />
+            </Popconfirm>
+          </Tooltip>
+        </div>
       </div>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <ClockCircleOutlined style={{ color: 'rgba(255, 255, 255, 0.45)' }} />
-          <span style={{ color: 'rgba(255, 255, 255, 0.85)' }}>{cronToText(task.cronExpression)}</span>
-        </div>
+      {/* 第二行：调度时间 + 公众号数 */}
+      <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'rgba(255,255,255,0.55)', marginBottom: 6 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <ClockCircleOutlined style={{ fontSize: 11 }} />
+          <span style={{ color: 'rgba(255,255,255,0.8)' }}>{cronToText(task.cronExpression)}</span>
+        </span>
         {accountCount > 0 && (
-          <div style={{ color: 'rgba(255, 255, 255, 0.45)' }}>
-            公众号: {accountCount} 个
-          </div>
+          <span>{accountCount} 个公众号</span>
         )}
-        {task.nextRunTime && (
-          <div style={{ color: 'rgba(255, 255, 255, 0.45)' }}>
-            下次执行: {new Date(task.nextRunTime).toLocaleString('zh-CN')}
-          </div>
-        )}
-        <div style={{ color: 'rgba(255, 255, 255, 0.45)' }}>
-          成功 {task.successRuns} / 失败 {task.failedRuns} / 共 {task.totalRuns}
-        </div>
+        <span>共 {task.totalRuns} 次 · {task.successRuns} 成功</span>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 'auto' }}>
-        <Button size="small" type="primary" icon={<PlayCircleOutlined />} onClick={() => onRunNow(task.ID)} disabled={!task.enabled}>
-          立即运行
-        </Button>
-        <Button size="small" icon={<HistoryOutlined />} onClick={() => onViewLogs(task.ID)}>日志</Button>
-        <Switch size="small" checked={task.enabled} onChange={() => onToggle(task)} checkedChildren="启用" unCheckedChildren="禁用" />
-        <Popconfirm title="确定删除此任务吗？" onConfirm={() => onDelete(task.ID)} okText="确定" cancelText="取消">
-          <Button size="small" danger icon={<DeleteOutlined />} />
-        </Popconfirm>
-      </div>
+      {/* 第三行：下次执行 */}
+      {task.nextRunTime && (
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>
+          下次: {new Date(task.nextRunTime).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+        </div>
+      )}
     </Card>
   )
 }
@@ -221,7 +247,18 @@ const SchedulePage: React.FC = () => {
     }
   }
 
-  useEffect(() => { loadTasks() }, [])
+  useEffect(() => {
+    loadTasks()
+    const off = EventsOn('task:completed', (data: any) => {
+      loadTasks()
+      if (data?.status === 'success') {
+        antMessage.success(`任务执行完成，获取 ${data.articles || 0} 篇文章`)
+      } else if (data?.status === 'failed') {
+        antMessage.error(`任务执行失败${data.errMsg ? '：' + data.errMsg : ''}`)
+      }
+    })
+    return () => EventsOff('task:completed')
+  }, [])
 
   // 打开创建/编辑对话框
   const handleOpenModal = (task?: models.ScheduledTask) => {
@@ -358,7 +395,6 @@ const SchedulePage: React.FC = () => {
     try {
       await RunScheduledTaskNow(id)
       antMessage.success('任务已开始执行')
-      setTimeout(loadTasks, 1000)
     } catch (error) {
       antMessage.error('运行任务失败')
     }
@@ -379,15 +415,16 @@ const SchedulePage: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: '12px 24px' }}>
       {/* 顶部操作栏 */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, height: 50 }}>
-        <Space size="large">
-          <Statistic title="启用的任务" value={enabledTasks} suffix={`/ ${tasks.length}`} valueStyle={{ fontSize: 20, color: '#07C160' }} />
-        </Space>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => handleOpenModal()}>创建任务</Button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+          <span style={{ fontSize: 22, fontWeight: 700, color: '#07C160', lineHeight: 1 }}>{enabledTasks}</span>
+          <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>/ {tasks.length} 个任务启用</span>
+        </div>
+        <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => handleOpenModal()}>创建任务</Button>
       </div>
 
       {/* 任务卡片网格 */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, flex: 1, overflow: 'auto', paddingBottom: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, alignContent: 'start', flex: 1, overflow: 'auto', paddingBottom: 12 }}>
         {tasks.length === 0 ? (
           <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300 }}>
             <Empty description="暂无定时任务，点击上方按钮创建" />
@@ -495,22 +532,20 @@ const SchedulePage: React.FC = () => {
           <div style={{ maxHeight: 400, overflow: 'auto' }}>
             {logs.map((log: any, idx: number) => (
               <div key={idx} style={{
-                padding: '8px 12px', marginBottom: 8,
+                padding: '6px 12px', marginBottom: 6,
                 background: 'rgba(255,255,255,0.03)', borderRadius: 6,
                 fontSize: 12,
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <Tag color={log.status === 'success' ? 'success' : log.status === 'failed' ? 'error' : 'processing'}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <Tag color={log.status === 'success' ? 'success' : log.status === 'failed' ? 'error' : 'processing'} style={{ margin: 0 }}>
                     {log.status === 'success' ? '成功' : log.status === 'failed' ? '失败' : '运行中'}
                   </Tag>
-                  <span style={{ color: 'rgba(255,255,255,0.45)' }}>
-                    {log.triggerType === 'manual' ? '手动' : '定时'}
+                  <span style={{ color: 'rgba(255,255,255,0.65)' }}>
+                    {new Date(log.startTime).toLocaleString('zh-CN')}
+                    {log.duration ? ` · ${(log.duration / 1000).toFixed(1)}s` : ''}
+                    {log.articlesCount ? ` · ${log.articlesCount} 篇文章` : ''}
                   </span>
-                </div>
-                <div style={{ color: 'rgba(255,255,255,0.65)' }}>
-                  {new Date(log.startTime).toLocaleString('zh-CN')}
-                  {log.duration ? ` · ${(log.duration / 1000).toFixed(1)}s` : ''}
-                  {log.articlesCount ? ` · ${log.articlesCount} 篇文章` : ''}
+                  <Tag style={{ margin: 0, fontSize: 11 }}>{log.triggerType === 'manual' ? '手动' : '定时'}</Tag>
                 </div>
                 {log.errorMessage && (
                   <div style={{ color: '#ff4d4f', marginTop: 4 }}>{log.errorMessage}</div>

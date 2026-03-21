@@ -19,12 +19,13 @@ import (
 
 // TaskScheduler 任务调度器
 type TaskScheduler struct {
-	taskRepo     repository.TaskRepository
-	articleRepo  repository.ArticleRepository
-	accountRepo  repository.AccountRepository
-	loginManager *spider.LoginManager
-	runningTasks map[uint]context.CancelFunc // 正在运行的任务
-	mu           sync.RWMutex
+	taskRepo       repository.TaskRepository
+	articleRepo    repository.ArticleRepository
+	accountRepo    repository.AccountRepository
+	loginManager   *spider.LoginManager
+	runningTasks   map[uint]context.CancelFunc // 正在运行的任务
+	mu             sync.RWMutex
+	onTaskComplete func(taskID uint, status string, articles int, errMsg string) // 任务完成回调
 }
 
 // NewTaskScheduler 创建任务调度器
@@ -41,6 +42,11 @@ func NewTaskScheduler(
 		loginManager: loginManager,
 		runningTasks: make(map[uint]context.CancelFunc),
 	}
+}
+
+// SetOnTaskComplete 设置任务完成回调
+func (ts *TaskScheduler) SetOnTaskComplete(fn func(taskID uint, status string, articles int, errMsg string)) {
+	ts.onTaskComplete = fn
 }
 
 // ExecuteTask 执行任务
@@ -114,6 +120,10 @@ func (ts *TaskScheduler) ExecuteTask(parentCtx context.Context, taskID uint, tri
 	ts.taskRepo.Update(task)
 
 	logger.Log.Info("Task completed", zap.Uint("taskID", taskID), zap.String("status", execLog.Status), zap.Int("articles", execLog.ArticlesCount), zap.Int64("durationMs", duration))
+
+	if ts.onTaskComplete != nil {
+		ts.onTaskComplete(taskID, execLog.Status, execLog.ArticlesCount, execLog.ErrorMessage)
+	}
 }
 
 // executeScrape 执行爬取
